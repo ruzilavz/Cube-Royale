@@ -36,6 +36,48 @@ function drawVoxel(g, color) {
   g.beginFill(dark);
   g.drawRect(0, BLOCK_SIZE * 0.6, BLOCK_SIZE, BLOCK_SIZE * 0.4);
   g.endFill();
+  if (PIXI.filters && PIXI.filters.DropShadowFilter) {
+    g.filters = [
+      new PIXI.filters.DropShadowFilter({
+        distance: 1,
+        blur: 2,
+        alpha: 0.6,
+      }),
+    ];
+  }
+}
+
+function getRandomGrowthPosition(cube) {
+  const occupied = new Set(cube.grid.map((c) => `${c.x},${c.y}`));
+  const candidates = [];
+  for (const cell of cube.grid) {
+    const dirs = [
+      [BLOCK_SIZE, 0],
+      [-BLOCK_SIZE, 0],
+      [0, BLOCK_SIZE],
+      [0, -BLOCK_SIZE],
+    ];
+    for (const [dx, dy] of dirs) {
+      const x = cell.x + dx;
+      const y = cell.y + dy;
+      const key = `${x},${y}`;
+      if (!occupied.has(key)) {
+        occupied.add(key); // avoid duplicates
+        candidates.push({ x, y });
+      }
+    }
+  }
+  if (candidates.length === 0) {
+    const radius = Math.ceil(cube.size / BLOCK_SIZE);
+    let x, y, key;
+    do {
+      x = (Math.floor(Math.random() * radius * 2) - radius) * BLOCK_SIZE;
+      y = (Math.floor(Math.random() * radius * 2) - radius) * BLOCK_SIZE;
+      key = `${x},${y}`;
+    } while (occupied.has(key));
+    return { x, y };
+  }
+  return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
 pveBtn.addEventListener('click', () => startGame('pve'));
@@ -129,14 +171,18 @@ function createCube(color, size, withPhysics = true) {
     for (let j = 0; j < count; j++) {
       const block = new PIXI.Graphics();
       drawVoxel(block, color);
-      block.x = -size / 2 + i * BLOCK_SIZE;
-      block.y = -size / 2 + j * BLOCK_SIZE;
+      const bx = -size / 2 + i * BLOCK_SIZE;
+      const by = -size / 2 + j * BLOCK_SIZE;
+      block.x = bx;
+      block.y = by;
       container.addChild(block);
-      container.grid.push(block);
+      container.grid.push({ block, x: bx, y: by });
     }
   }
   container.massSize = container.grid.length;
   container.blockSize = BLOCK_SIZE;
+  container.hitTime = 0;
+  container.shakeTime = 0;
   if (withPhysics) {
     const body = Bodies.rectangle(0, 0, size, size, { frictionAir: 0.2 });
     container.body = body;
@@ -149,22 +195,27 @@ function createCube(color, size, withPhysics = true) {
 }
 
 function updateCubeLayout(cube) {
-  const count = Math.ceil(Math.sqrt(cube.grid.length));
-  const newSize = count * BLOCK_SIZE;
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  for (const cell of cube.grid) {
+    minX = Math.min(minX, cell.x);
+    minY = Math.min(minY, cell.y);
+    maxX = Math.max(maxX, cell.x);
+    maxY = Math.max(maxY, cell.y);
+    cell.block.x = cell.x;
+    cell.block.y = cell.y;
+  }
+  if (cube.grid.length === 0) return;
+  const width = maxX - minX + BLOCK_SIZE;
+  const height = maxY - minY + BLOCK_SIZE;
+  const newSize = Math.max(width, height);
   if (cube.body && cube.size !== newSize) {
     const scale = newSize / cube.size;
     Body.scale(cube.body, scale, scale);
   }
   cube.size = newSize;
-  let idx = 0;
-  for (let j = 0; j < count; j++) {
-    for (let i = 0; i < count && idx < cube.grid.length; i++) {
-      const block = cube.grid[idx];
-      block.x = -cube.size / 2 + i * BLOCK_SIZE;
-      block.y = -cube.size / 2 + j * BLOCK_SIZE;
-      idx++;
-    }
-  }
   cube.massSize = cube.grid.length;
 }
 
@@ -254,8 +305,11 @@ function collectParticle(cube, p) {
   removeParticle(p);
   const block = new PIXI.Graphics();
   drawVoxel(block, cube.color);
+  const pos = getRandomGrowthPosition(cube);
+  block.x = pos.x;
+  block.y = pos.y;
   cube.addChild(block);
-  cube.grid.push(block);
+  cube.grid.push({ block, x: pos.x, y: pos.y });
   updateCubeLayout(cube);
 }
 
@@ -394,6 +448,18 @@ function createFragmentFromCollision(size, pos, from, color) {
   return frag;
 }
 
+function createBlockExplosion(pos) {
+  const g = new PIXI.Graphics();
+  g.beginFill(0xffffff, 0.8);
+  g.drawCircle(0, 0, 6);
+  g.endFill();
+  g.x = pos.x;
+  g.y = pos.y;
+  const e = { g, life: 0, maxLife: 20, startAlpha: 0.8 };
+  world.addChild(g);
+  effects.push(e);
+}
+
 function createDeathCloud(pos) {
   const g = new PIXI.Graphics();
   g.beginFill(0xffffff, 0.6);
@@ -409,17 +475,25 @@ function createDeathCloud(pos) {
 function removeCubeBlocks(cube, count, fromPos) {
   for (let i = 0; i < count && cube.grid.length > 0; i++) {
     const idx = Math.floor(Math.random() * cube.grid.length);
-    const block = cube.grid.splice(idx, 1)[0];
-    cube.removeChild(block);
+    const cell = cube.grid.splice(idx, 1)[0];
+    cube.removeChild(cell.block);
     if (cube.body) {
       const pos = {
-        x: cube.body.position.x + block.x + cube.blockSize / 2,
-        y: cube.body.position.y + block.y + cube.blockSize / 2,
+        x: cube.body.position.x + cell.x + cube.blockSize / 2,
+        y: cube.body.position.y + cell.y + cube.blockSize / 2,
       };
-      const frag = createFragmentFromCollision(cube.blockSize, pos, fromPos, cube.color);
+      const frag = createFragmentFromCollision(
+        cube.blockSize,
+        pos,
+        fromPos,
+        cube.color
+      );
       world.addChild(frag);
+      createBlockExplosion(pos);
     }
   }
+  cube.hitTime = 12;
+  cube.shakeTime = 12;
   updateCubeLayout(cube);
   if (cube.grid.length === 0) {
     if (cube.body) {
@@ -431,8 +505,16 @@ function removeCubeBlocks(cube, count, fromPos) {
 
 function syncGraphics() {
   for (const c of cubes) {
-    c.x = c.body.position.x;
-    c.y = c.body.position.y;
+    const shake = c.shakeTime > 0 ? 2 : 0;
+    c.x = c.body.position.x + (shake ? (Math.random() - 0.5) * shake : 0);
+    c.y = c.body.position.y + (shake ? (Math.random() - 0.5) * shake : 0);
+    if (c.hitTime > 0) {
+      c.hitTime -= 1;
+      c.tint = 0xffaaaa;
+      c.shakeTime -= 1;
+    } else {
+      c.tint = 0xffffff;
+    }
   }
   for (const f of foods) {
     f.x = f.body.position.x;
