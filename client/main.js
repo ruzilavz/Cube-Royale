@@ -12,6 +12,7 @@ const { Engine, World: MWorld, Bodies, Body, Vector, Events } = Matter;
 const WORLD_SIZE = 5000;
 const FOOD_COUNT = 250;
 const MAX_PLAYER_SIZE = 250;
+const BLOCK_SIZE = 10;
 
 pveBtn.addEventListener('click', () => startGame('pve'));
 pvpBtn.addEventListener('click', () => startGame('pvp'));
@@ -90,21 +91,34 @@ function initGame() {
 }
 
 function createCube(color, size, withPhysics = true) {
-  const g = new PIXI.Graphics();
-  g.beginFill(color);
-  g.drawRect(-size / 2, -size / 2, size, size);
-  g.endFill();
-  g.size = size;
-  g.color = color;
-  g.isCube = true;
+  const container = new PIXI.Container();
+  container.size = size;
+  container.color = color;
+  container.isCube = true;
+  container.grid = [];
+  const count = Math.round(size / BLOCK_SIZE);
+  for (let i = 0; i < count; i++) {
+    for (let j = 0; j < count; j++) {
+      const block = new PIXI.Graphics();
+      block.beginFill(color);
+      block.drawRect(0, 0, BLOCK_SIZE, BLOCK_SIZE);
+      block.endFill();
+      block.x = -size / 2 + i * BLOCK_SIZE;
+      block.y = -size / 2 + j * BLOCK_SIZE;
+      container.addChild(block);
+      container.grid.push(block);
+    }
+  }
+  container.massSize = container.grid.length;
+  container.blockSize = BLOCK_SIZE;
   if (withPhysics) {
     const body = Bodies.rectangle(0, 0, size, size, { frictionAir: 0.2 });
-    g.body = body;
-    body.g = g;
+    container.body = body;
+    body.g = container;
     MWorld.add(engine.world, body);
-    cubes.push(g);
+    cubes.push(container);
   }
-  return g;
+  return container;
 }
 
 function spawnFood() {
@@ -125,15 +139,6 @@ function spawnFood() {
   foods.push(food);
 }
 
-function setCubeSize(cube, newSize) {
-  const scale = newSize / cube.size;
-  Body.scale(cube.body, scale, scale);
-  cube.size = newSize;
-  cube.clear();
-  cube.beginFill(cube.color);
-  cube.drawRect(-cube.size / 2, -cube.size / 2, cube.size, cube.size);
-  cube.endFill();
-}
 
 function gameLoop(delta, targetX, targetY) {
   // движение игрока
@@ -163,17 +168,38 @@ function removeParticle(p) {
 }
 
 function collectParticle(cube, p) {
-  const added = p.massSize;
-  const newSize = Math.min(cube.size + added, MAX_PLAYER_SIZE);
-  setCubeSize(cube, newSize);
   removeParticle(p);
+  const count = Math.round(cube.size / BLOCK_SIZE);
+  const total = count * count;
+  if (cube.grid.length >= total) return;
+  const available = [];
+  for (let i = 0; i < count; i++) {
+    for (let j = 0; j < count; j++) {
+      const px = -cube.size / 2 + i * BLOCK_SIZE;
+      const py = -cube.size / 2 + j * BLOCK_SIZE;
+      if (!cube.grid.some(b => b.x === px && b.y === py)) {
+        available.push({ x: px, y: py });
+      }
+    }
+  }
+  if (available.length === 0) return;
+  const pos = available[Math.floor(Math.random() * available.length)];
+  const block = new PIXI.Graphics();
+  block.beginFill(cube.color);
+  block.drawRect(0, 0, BLOCK_SIZE, BLOCK_SIZE);
+  block.endFill();
+  block.x = pos.x;
+  block.y = pos.y;
+  cube.addChild(block);
+  cube.grid.push(block);
+  cube.massSize = cube.grid.length;
 }
 
 function createBots(count) {
   for (let i = 0; i < count; i++) {
     const bot = createCube(0xff0000, 50);
     Body.setPosition(bot.body, { x: (Math.random() - 0.5) * WORLD_SIZE, y: (Math.random() - 0.5) * WORLD_SIZE });
-    bot.size = 50;
+    bot.massSize = bot.grid.length;
     bot.target = null;
     bots.push(bot);
     world.addChild(bot);
@@ -194,7 +220,7 @@ function updateBots(delta) {
     }
     if (nearest) {
       let dir;
-      if (bot.size >= nearest.size) {
+      if (bot.massSize >= nearest.massSize) {
         dir = Vector.sub(nearest.body.position, bot.body.position);
       } else {
         dir = Vector.sub(bot.body.position, nearest.body.position);
@@ -224,17 +250,11 @@ function handleCollisions(event) {
 }
 
 function collideCubes(c1, c2) {
-  if (c1.size === c2.size) return;
-  let smaller = c1.size < c2.size ? c1 : c2;
-  let larger = c1.size < c2.size ? c2 : c1;
-  const maxParticle = Math.min(smaller.size * 0.25, smaller.size);
-  const partSize = Math.max(5, Math.floor(Math.random() * maxParticle));
-  if (partSize <= 0) return;
-  const newSize = Math.max(5, smaller.size - partSize);
-  setCubeSize(smaller, newSize);
-  const pos = { x: smaller.body.position.x, y: smaller.body.position.y };
-  const fragment = createFragmentFromCollision(partSize, pos, larger.body.position, smaller.color);
-  world.addChild(fragment);
+  if (c1.massSize === c2.massSize) return;
+  let smaller = c1.massSize < c2.massSize ? c1 : c2;
+  let larger = c1.massSize < c2.massSize ? c2 : c1;
+  const removeCount = Math.min(3, smaller.grid.length);
+  removeCubeBlocks(smaller, removeCount, larger.body.position);
 }
 
 function createFragmentFromCollision(size, pos, from, color) {
@@ -254,6 +274,23 @@ function createFragmentFromCollision(size, pos, from, color) {
   MWorld.add(engine.world, body);
   foods.push(frag);
   return frag;
+}
+
+function removeCubeBlocks(cube, count, fromPos) {
+  for (let i = 0; i < count && cube.grid.length > 0; i++) {
+    const idx = Math.floor(Math.random() * cube.grid.length);
+    const block = cube.grid.splice(idx, 1)[0];
+    cube.removeChild(block);
+    if (cube.body) {
+      const pos = {
+        x: cube.body.position.x + block.x + cube.blockSize / 2,
+        y: cube.body.position.y + block.y + cube.blockSize / 2,
+      };
+      const frag = createFragmentFromCollision(cube.blockSize, pos, fromPos, cube.color);
+      world.addChild(frag);
+    }
+  }
+  cube.massSize = cube.grid.length;
 }
 
 function syncGraphics() {
@@ -292,13 +329,6 @@ function setupSocket() {
     if (rp) {
       rp.x = data.x;
       rp.y = data.y;
-      if (rp.size !== data.size) {
-        rp.size = data.size;
-        rp.clear();
-        rp.beginFill(0x0000ff);
-        rp.drawRect(-rp.size / 2, -rp.size / 2, rp.size, rp.size);
-        rp.endFill();
-      }
     }
   });
 }
@@ -306,7 +336,6 @@ function setupSocket() {
 function createRemotePlayer(id) {
   if (remotePlayers[id]) return;
   const g = createCube(0x0000ff, 50, false);
-  g.size = 50;
   g.x = 0;
   g.y = 0;
   remotePlayers[id] = g;
