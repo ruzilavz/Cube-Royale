@@ -14,6 +14,30 @@ const FOOD_COUNT = 250;
 const MAX_PLAYER_SIZE = 250;
 const BLOCK_SIZE = 10;
 
+function lighten(color, amount) {
+  const rgb = PIXI.utils.hex2rgb(color);
+  return PIXI.utils.rgb2hex(rgb.map(c => Math.min(1, c + amount)));
+}
+
+function darken(color, amount) {
+  const rgb = PIXI.utils.hex2rgb(color);
+  return PIXI.utils.rgb2hex(rgb.map(c => Math.max(0, c - amount)));
+}
+
+function drawVoxel(g, color) {
+  const light = lighten(color, 0.2);
+  const dark = darken(color, 0.2);
+  g.beginFill(color);
+  g.drawRect(0, 0, BLOCK_SIZE, BLOCK_SIZE);
+  g.endFill();
+  g.beginFill(light);
+  g.drawRect(0, 0, BLOCK_SIZE, BLOCK_SIZE * 0.4);
+  g.endFill();
+  g.beginFill(dark);
+  g.drawRect(0, BLOCK_SIZE * 0.6, BLOCK_SIZE, BLOCK_SIZE * 0.4);
+  g.endFill();
+}
+
 pveBtn.addEventListener('click', () => startGame('pve'));
 pvpBtn.addEventListener('click', () => startGame('pvp'));
 
@@ -100,9 +124,7 @@ function createCube(color, size, withPhysics = true) {
   for (let i = 0; i < count; i++) {
     for (let j = 0; j < count; j++) {
       const block = new PIXI.Graphics();
-      block.beginFill(color);
-      block.drawRect(0, 0, BLOCK_SIZE, BLOCK_SIZE);
-      block.endFill();
+      drawVoxel(block, color);
       block.x = -size / 2 + i * BLOCK_SIZE;
       block.y = -size / 2 + j * BLOCK_SIZE;
       container.addChild(block);
@@ -118,7 +140,42 @@ function createCube(color, size, withPhysics = true) {
     MWorld.add(engine.world, body);
     cubes.push(container);
   }
+  updateCubeLayout(container);
   return container;
+}
+
+function updateCubeLayout(cube) {
+  const count = Math.ceil(Math.sqrt(cube.grid.length));
+  const newSize = count * BLOCK_SIZE;
+  if (cube.body && cube.size !== newSize) {
+    const scale = newSize / cube.size;
+    Body.scale(cube.body, scale, scale);
+  }
+  cube.size = newSize;
+  let idx = 0;
+  for (let j = 0; j < count; j++) {
+    for (let i = 0; i < count && idx < cube.grid.length; i++) {
+      const block = cube.grid[idx];
+      block.x = -cube.size / 2 + i * BLOCK_SIZE;
+      block.y = -cube.size / 2 + j * BLOCK_SIZE;
+      idx++;
+    }
+  }
+  cube.massSize = cube.grid.length;
+}
+
+function destroyCube(cube) {
+  if (cube.body) {
+    MWorld.remove(engine.world, cube.body);
+    const idx = cubes.indexOf(cube);
+    if (idx !== -1) cubes.splice(idx, 1);
+  }
+  world.removeChild(cube);
+  if (cube === player) {
+    player = null;
+  }
+  const bIdx = bots.indexOf(cube);
+  if (bIdx !== -1) bots.splice(bIdx, 1);
 }
 
 function spawnFood() {
@@ -141,6 +198,7 @@ function spawnFood() {
 
 
 function gameLoop(delta, targetX, targetY) {
+  if (!player) return;
   // движение игрока
   const dx = targetX;
   const dy = targetY;
@@ -169,30 +227,11 @@ function removeParticle(p) {
 
 function collectParticle(cube, p) {
   removeParticle(p);
-  const count = Math.round(cube.size / BLOCK_SIZE);
-  const total = count * count;
-  if (cube.grid.length >= total) return;
-  const available = [];
-  for (let i = 0; i < count; i++) {
-    for (let j = 0; j < count; j++) {
-      const px = -cube.size / 2 + i * BLOCK_SIZE;
-      const py = -cube.size / 2 + j * BLOCK_SIZE;
-      if (!cube.grid.some(b => b.x === px && b.y === py)) {
-        available.push({ x: px, y: py });
-      }
-    }
-  }
-  if (available.length === 0) return;
-  const pos = available[Math.floor(Math.random() * available.length)];
   const block = new PIXI.Graphics();
-  block.beginFill(cube.color);
-  block.drawRect(0, 0, BLOCK_SIZE, BLOCK_SIZE);
-  block.endFill();
-  block.x = pos.x;
-  block.y = pos.y;
+  drawVoxel(block, cube.color);
   cube.addChild(block);
   cube.grid.push(block);
-  cube.massSize = cube.grid.length;
+  updateCubeLayout(cube);
 }
 
 function createBots(count) {
@@ -266,7 +305,10 @@ function createFragmentFromCollision(size, pos, from, color) {
   frag.y = pos.y;
   frag.isFood = true;
   frag.massSize = size;
-  const body = Bodies.rectangle(pos.x, pos.y, size, size, { isSensor: true });
+  const body = Bodies.rectangle(pos.x, pos.y, size, size, {
+    isSensor: true,
+    frictionAir: 0.1,
+  });
   frag.body = body;
   body.g = frag;
   const dir = Vector.normalise(Vector.sub(pos, from));
@@ -290,7 +332,10 @@ function removeCubeBlocks(cube, count, fromPos) {
       world.addChild(frag);
     }
   }
-  cube.massSize = cube.grid.length;
+  updateCubeLayout(cube);
+  if (cube.grid.length === 0) {
+    destroyCube(cube);
+  }
 }
 
 function syncGraphics() {
@@ -302,8 +347,10 @@ function syncGraphics() {
     f.x = f.body.position.x;
     f.y = f.body.position.y;
   }
-  world.x = app.screen.width / 2 - player.body.position.x;
-  world.y = app.screen.height / 2 - player.body.position.y;
+  if (player) {
+    world.x = app.screen.width / 2 - player.body.position.x;
+    world.y = app.screen.height / 2 - player.body.position.y;
+  }
 }
 
 function setupSocket() {
