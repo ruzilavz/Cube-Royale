@@ -84,7 +84,7 @@ function initGame() {
   border.drawRect(-WORLD_SIZE / 2, -WORLD_SIZE / 2, WORLD_SIZE, WORLD_SIZE);
   world.addChild(border);
 
-  player = createCube(0x00ff00, 50);
+  player = createCube(0x00ff00, BLOCK_SIZE * 2); // start with 4 blocks
   Body.setPosition(player.body, { x: 0, y: 0 });
   world.addChild(player);
 
@@ -209,6 +209,14 @@ function gameLoop(delta, targetX, targetY) {
   }
   Engine.update(engine, delta * 16);
 
+  for (const f of foods) {
+    if (f.isFragment) {
+      const t = app.ticker.lastTime / 1000;
+      const scale = 1 + 0.1 * Math.sin(t + f.pulseOffset);
+      f.scale.set(scale, scale);
+    }
+  }
+
   if (mode === 'pve') {
     updateBots(delta);
   } else if (mode === 'pvp' && socket) {
@@ -236,7 +244,7 @@ function collectParticle(cube, p) {
 
 function createBots(count) {
   for (let i = 0; i < count; i++) {
-    const bot = createCube(0xff0000, 50);
+    const bot = createCube(0xff0000, BLOCK_SIZE * 2); // start with 4 blocks
     Body.setPosition(bot.body, { x: (Math.random() - 0.5) * WORLD_SIZE, y: (Math.random() - 0.5) * WORLD_SIZE });
     bot.massSize = bot.grid.length;
     bot.target = null;
@@ -260,8 +268,14 @@ function updateBots(delta) {
     if (nearest) {
       let dir;
       if (bot.massSize >= nearest.massSize) {
-        dir = Vector.sub(nearest.body.position, bot.body.position);
+        if (dist < 150) {
+          // keep some distance when too close
+          dir = Vector.sub(bot.body.position, nearest.body.position);
+        } else {
+          dir = Vector.sub(nearest.body.position, bot.body.position);
+        }
       } else {
+        // flee from stronger cubes
         dir = Vector.sub(bot.body.position, nearest.body.position);
       }
       const len = Vector.magnitude(dir);
@@ -269,6 +283,13 @@ function updateBots(delta) {
         const speed = 2;
         Body.translate(bot.body, { x: (dir.x / len) * speed * delta, y: (dir.y / len) * speed * delta });
       }
+    } else {
+      // wander randomly when no targets
+      if (!bot.wanderDir || Math.random() < 0.02) {
+        bot.wanderDir = Vector.normalise({ x: Math.random() - 0.5, y: Math.random() - 0.5 });
+      }
+      const speed = 1.5;
+      Body.translate(bot.body, { x: bot.wanderDir.x * speed * delta, y: bot.wanderDir.y * speed * delta });
     }
   }
 }
@@ -298,21 +319,29 @@ function collideCubes(c1, c2) {
 
 function createFragmentFromCollision(size, pos, from, color) {
   const frag = new PIXI.Graphics();
-  frag.beginFill(color);
-  frag.drawRect(-size / 2, -size / 2, size, size);
-  frag.endFill();
+  drawVoxel(frag, color);
   frag.x = pos.x;
   frag.y = pos.y;
   frag.isFood = true;
+  frag.isFragment = true;
+  frag.alpha = 0.8;
+  frag.pulseOffset = Math.random() * Math.PI * 2;
+  if (PIXI.filters && PIXI.filters.DropShadowFilter) {
+    frag.filters = [new PIXI.filters.DropShadowFilter({
+      distance: 2,
+      alpha: 0.5,
+      blur: 2,
+    })];
+  }
   frag.massSize = size;
   const body = Bodies.rectangle(pos.x, pos.y, size, size, {
     isSensor: true,
-    frictionAir: 0.1,
+    frictionAir: 0.05,
   });
   frag.body = body;
   body.g = frag;
   const dir = Vector.normalise(Vector.sub(pos, from));
-  Body.setVelocity(body, { x: dir.x * 5, y: dir.y * 5 });
+  Body.setVelocity(body, { x: dir.x * 3, y: dir.y * 3 });
   MWorld.add(engine.world, body);
   foods.push(frag);
   return frag;
@@ -382,7 +411,7 @@ function setupSocket() {
 
 function createRemotePlayer(id) {
   if (remotePlayers[id]) return;
-  const g = createCube(0x0000ff, 50, false);
+  const g = createCube(0x0000ff, BLOCK_SIZE * 2, false); // start with 4 blocks
   g.x = 0;
   g.y = 0;
   remotePlayers[id] = g;
