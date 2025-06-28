@@ -5,7 +5,16 @@ const pvpBtn = document.getElementById('pvpBtn');
 let mode = null; // 'pve' or 'pvp'
 let socket;
 
-let app, world, engine, player, foods, bots = [], remotePlayers = {}, cubes = [], effects = [];
+let app,
+  world,
+  engine,
+  player,
+  foods,
+  bots = [],
+  remotePlayers = {},
+  cubes = [],
+  effects = [],
+  leaderboardContainer;
 
 const { Engine, World: MWorld, Bodies, Body, Vector, Events } = Matter;
 
@@ -111,6 +120,11 @@ function initGame() {
   world = new PIXI.Container();
   app.stage.addChild(world);
 
+  leaderboardContainer = new PIXI.Container();
+  leaderboardContainer.x = 10;
+  leaderboardContainer.y = 10;
+  app.stage.addChild(leaderboardContainer);
+
   const half = WORLD_SIZE / 2;
   MWorld.add(engine.world, [
     Bodies.rectangle(0, -half - 50, WORLD_SIZE, 100, { isStatic: true }),
@@ -158,6 +172,7 @@ function initGame() {
   });
 
   app.ticker.add((delta) => gameLoop(delta, targetX, targetY));
+  setInterval(updateLeaderboard, 500);
 }
 
 function createCube(color, size, withPhysics = true) {
@@ -211,9 +226,20 @@ function updateCubeLayout(cube) {
   const width = maxX - minX + BLOCK_SIZE;
   const height = maxY - minY + BLOCK_SIZE;
   const newSize = Math.max(width, height);
-  if (cube.body && cube.size !== newSize) {
-    const scale = newSize / cube.size;
-    Body.scale(cube.body, scale, scale);
+  if (cube.body) {
+    const old = cube.body;
+    const pos = { x: old.position.x, y: old.position.y };
+    const vel = { x: old.velocity.x, y: old.velocity.y };
+    const angle = old.angle;
+    const angVel = old.angularVelocity;
+    MWorld.remove(engine.world, old);
+    const body = Bodies.rectangle(pos.x, pos.y, width, height, { frictionAir: 0.2 });
+    Body.setVelocity(body, vel);
+    Body.setAngle(body, angle);
+    Body.setAngularVelocity(body, angVel);
+    body.g = cube;
+    cube.body = body;
+    MWorld.add(engine.world, body);
   }
   cube.size = newSize;
   cube.massSize = cube.grid.length;
@@ -567,4 +593,30 @@ function removeRemotePlayer(id) {
   if (!g) return;
   world.removeChild(g);
   delete remotePlayers[id];
+}
+
+function updateLeaderboard() {
+  if (!leaderboardContainer) return;
+  leaderboardContainer.removeChildren();
+  const entries = [];
+  if (player) {
+    entries.push({ name: 'You', color: player.color, mass: player.grid.length });
+  }
+  for (const bot of bots) {
+    entries.push({ name: 'Bot', color: bot.color, mass: bot.grid.length });
+  }
+  for (const id in remotePlayers) {
+    const rp = remotePlayers[id];
+    entries.push({ name: id.slice(0, 4), color: rp.color, mass: rp.grid.length });
+  }
+  entries.sort((a, b) => b.mass - a.mass);
+  const top = entries.slice(0, 10);
+  top.forEach((e, i) => {
+    const text = new PIXI.Text(`${i + 1}. ${e.mass}`, {
+      fill: e.color,
+      fontSize: 14,
+    });
+    text.y = i * 16;
+    leaderboardContainer.addChild(text);
+  });
 }
