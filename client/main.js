@@ -233,27 +233,27 @@ function collideCubes(c1, c2) {
   const newSize = Math.max(5, smaller.size - partSize);
   setCubeSize(smaller, newSize);
   const pos = { x: smaller.body.position.x, y: smaller.body.position.y };
-  const particle = createParticleFromCollision(partSize, pos, larger.body.position);
-  world.addChild(particle);
+  const fragment = createFragmentFromCollision(partSize, pos, larger.body.position, smaller.color);
+  world.addChild(fragment);
 }
 
-function createParticleFromCollision(size, pos, from) {
-  const p = new PIXI.Graphics();
-  p.beginFill(0xffcc00);
-  p.drawCircle(0, 0, size);
-  p.endFill();
-  p.x = pos.x;
-  p.y = pos.y;
-  p.isFood = true;
-  p.massSize = size;
-  const body = Bodies.circle(pos.x, pos.y, size, { isSensor: true });
-  p.body = body;
-  body.g = p;
+function createFragmentFromCollision(size, pos, from, color) {
+  const frag = new PIXI.Graphics();
+  frag.beginFill(color);
+  frag.drawRect(-size / 2, -size / 2, size, size);
+  frag.endFill();
+  frag.x = pos.x;
+  frag.y = pos.y;
+  frag.isFood = true;
+  frag.massSize = size;
+  const body = Bodies.rectangle(pos.x, pos.y, size, size, { isSensor: true });
+  frag.body = body;
+  body.g = frag;
   const dir = Vector.normalise(Vector.sub(pos, from));
   Body.setVelocity(body, { x: dir.x * 5, y: dir.y * 5 });
   MWorld.add(engine.world, body);
-  foods.push(p);
-  return p;
+  foods.push(frag);
+  return frag;
 }
 
 function syncGraphics() {
