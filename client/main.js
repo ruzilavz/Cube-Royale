@@ -5,7 +5,7 @@ const pvpBtn = document.getElementById('pvpBtn');
 let mode = null; // 'pve' or 'pvp'
 let socket;
 
-let app, world, engine, player, foods, bots = [], remotePlayers = {}, cubes = [];
+let app, world, engine, player, foods, bots = [], remotePlayers = {}, cubes = [], effects = [];
 
 const { Engine, World: MWorld, Bodies, Body, Vector, Events } = Matter;
 
@@ -83,6 +83,10 @@ function initGame() {
   border.lineStyle(4, 0xffffff);
   border.drawRect(-WORLD_SIZE / 2, -WORLD_SIZE / 2, WORLD_SIZE, WORLD_SIZE);
   world.addChild(border);
+
+  bots = [];
+  cubes = [];
+  effects = [];
 
   player = createCube(0x00ff00, BLOCK_SIZE * 2); // start with 4 blocks
   Body.setPosition(player.body, { x: 0, y: 0 });
@@ -214,6 +218,19 @@ function gameLoop(delta, targetX, targetY) {
       const t = app.ticker.lastTime / 1000;
       const scale = 1 + 0.1 * Math.sin(t + f.pulseOffset);
       f.scale.set(scale, scale);
+      f.rotation += f.rotationSpeed * delta;
+    }
+  }
+
+  for (let i = effects.length - 1; i >= 0; i--) {
+    const e = effects[i];
+    e.life += delta;
+    const t = e.life / e.maxLife;
+    e.g.scale.set(1 + t);
+    e.g.alpha = e.startAlpha * (1 - t);
+    if (e.life >= e.maxLife) {
+      world.removeChild(e.g);
+      effects.splice(i, 1);
     }
   }
 
@@ -254,42 +271,71 @@ function createBots(count) {
 }
 
 function updateBots(delta) {
+  const SEP_DIST = 40;
   for (const bot of bots) {
-    let nearest = null;
-    let dist = Infinity;
-    for (const c of cubes) {
-      if (c === bot) continue;
-      const d = Vector.magnitude(Vector.sub(bot.body.position, c.body.position));
-      if (d < dist) {
-        dist = d;
-        nearest = c;
+    let move = { x: 0, y: 0 };
+
+    // Separation so bots don't crowd
+    for (const other of bots) {
+      if (other === bot) continue;
+      const diff = Vector.sub(bot.body.position, other.body.position);
+      const d = Vector.magnitude(diff);
+      if (d > 0 && d < SEP_DIST) {
+        const push = Vector.mult(diff, (SEP_DIST - d) / SEP_DIST);
+        move = Vector.add(move, push);
       }
     }
-    if (nearest) {
-      let dir;
-      if (bot.massSize >= nearest.massSize) {
-        if (dist < 150) {
-          // keep some distance when too close
-          dir = Vector.sub(bot.body.position, nearest.body.position);
-        } else {
-          dir = Vector.sub(nearest.body.position, bot.body.position);
-        }
-      } else {
-        // flee from stronger cubes
-        dir = Vector.sub(bot.body.position, nearest.body.position);
+
+    let prey = null;
+    let preyDist = Infinity;
+    let threat = null;
+    let threatDist = Infinity;
+    for (const c of cubes) {
+      if (c === bot) continue;
+      const d = Vector.magnitude(Vector.sub(c.body.position, bot.body.position));
+      if (c.massSize < bot.massSize && d < preyDist) {
+        prey = c;
+        preyDist = d;
       }
-      const len = Vector.magnitude(dir);
-      if (len > 0) {
-        const speed = 2;
-        Body.translate(bot.body, { x: (dir.x / len) * speed * delta, y: (dir.y / len) * speed * delta });
+      if (c.massSize > bot.massSize && d < threatDist) {
+        threat = c;
+        threatDist = d;
       }
-    } else {
-      // wander randomly when no targets
+    }
+
+    let targetFood = null;
+    let foodDist = Infinity;
+    for (const f of foods) {
+      const d = Vector.magnitude(Vector.sub(f.body.position, bot.body.position));
+      if (d < foodDist) {
+        targetFood = f;
+        foodDist = d;
+      }
+    }
+
+    let dir = null;
+    if (threat && threatDist < 250) {
+      dir = Vector.sub(bot.body.position, threat.body.position);
+    } else if (prey && preyDist < 400) {
+      if (preyDist > 120) {
+        dir = Vector.sub(prey.body.position, bot.body.position);
+      }
+    } else if (targetFood && foodDist < 500) {
+      dir = Vector.sub(targetFood.body.position, bot.body.position);
+    }
+
+    if (!dir) {
       if (!bot.wanderDir || Math.random() < 0.02) {
         bot.wanderDir = Vector.normalise({ x: Math.random() - 0.5, y: Math.random() - 0.5 });
       }
-      const speed = 1.5;
-      Body.translate(bot.body, { x: bot.wanderDir.x * speed * delta, y: bot.wanderDir.y * speed * delta });
+      dir = bot.wanderDir;
+    }
+
+    move = Vector.add(move, dir);
+    if (move.x !== 0 || move.y !== 0) {
+      move = Vector.normalise(move);
+      const speed = 2;
+      Body.translate(bot.body, { x: move.x * speed * delta, y: move.y * speed * delta });
     }
   }
 }
@@ -325,6 +371,7 @@ function createFragmentFromCollision(size, pos, from, color) {
   frag.isFood = true;
   frag.isFragment = true;
   frag.alpha = 0.8;
+  frag.rotationSpeed = (Math.random() - 0.5) * 0.1;
   frag.pulseOffset = Math.random() * Math.PI * 2;
   if (PIXI.filters && PIXI.filters.DropShadowFilter) {
     frag.filters = [new PIXI.filters.DropShadowFilter({
@@ -336,15 +383,27 @@ function createFragmentFromCollision(size, pos, from, color) {
   frag.massSize = size;
   const body = Bodies.rectangle(pos.x, pos.y, size, size, {
     isSensor: true,
-    frictionAir: 0.05,
+    frictionAir: 0.15,
   });
   frag.body = body;
   body.g = frag;
   const dir = Vector.normalise(Vector.sub(pos, from));
-  Body.setVelocity(body, { x: dir.x * 3, y: dir.y * 3 });
+  Body.setVelocity(body, { x: dir.x * 4, y: dir.y * 4 });
   MWorld.add(engine.world, body);
   foods.push(frag);
   return frag;
+}
+
+function createDeathCloud(pos) {
+  const g = new PIXI.Graphics();
+  g.beginFill(0xffffff, 0.6);
+  g.drawCircle(0, 0, 20);
+  g.endFill();
+  g.x = pos.x;
+  g.y = pos.y;
+  const e = { g, life: 0, maxLife: 60, startAlpha: 0.6 };
+  world.addChild(g);
+  effects.push(e);
 }
 
 function removeCubeBlocks(cube, count, fromPos) {
@@ -363,6 +422,9 @@ function removeCubeBlocks(cube, count, fromPos) {
   }
   updateCubeLayout(cube);
   if (cube.grid.length === 0) {
+    if (cube.body) {
+      createDeathCloud(cube.body.position);
+    }
     destroyCube(cube);
   }
 }
