@@ -420,8 +420,10 @@ function gameLoop(delta, targetX, targetY) {
       f.rotation += f.rotationSpeed * delta;
     }
     if (f.pulseOffset !== undefined) {
-      const scale = 1 + Math.sin(globalTime * 0.1 + f.pulseOffset) * 0.1;
-      f.scale.set(scale);
+      const pulse = 1 + Math.sin(globalTime * 0.1 + f.pulseOffset) * 0.1;
+      f.scale.set(pulse);
+      f.width = FOOD_SIZE;
+      f.height = FOOD_SIZE;
     }
   }
 
