@@ -44,6 +44,7 @@ const WORLD_SIZE = 5000;
 const FOOD_COUNT = 250;
 const MAX_PLAYER_SIZE = 250;
 const BLOCK_SIZE = 35;
+const FOOD_SIZE = 25;
 let cubeIdCounter = 0;
 const HIT_COOLDOWN = 500; // ms between damage from the same cube
 const SPEED_BASE = 8;
@@ -378,7 +379,7 @@ function spawnFood() {
   const styleNames = Object.keys(STYLES);
   const style = STYLES[styleNames[Math.floor(Math.random() * styleNames.length)]];
   const food = new PIXI.Sprite(PIXI.Texture.from(style.path));
-  const size = BLOCK_SIZE;
+  const size = FOOD_SIZE;
   food.width = size;
   food.height = size;
   food.x = (Math.random() - 0.5) * WORLD_SIZE;
