@@ -477,34 +477,83 @@ function collectParticle(cube, p) {
   }
 }
 
+function easeInOutSine(t) {
+  return -(Math.cos(Math.PI * t) - 1) / 2;
+}
+
+function easeOutBack(t) {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
 function teleportCube(cube, dest) {
   if (!cube || cube.isTeleporting) return;
+
   const start = { x: cube.body.position.x, y: cube.body.position.y };
   cube.isTeleporting = true;
+
   MWorld.remove(engine.world, cube.body);
   cube.visible = false;
 
+  const infos = [];
   for (const cell of cube.grid) {
     world.addChild(cell.block);
-    cell.block.x = start.x + cell.x;
-    cell.block.y = start.y + cell.y;
+    const startPos = { x: start.x + cell.x, y: start.y + cell.y };
+    cell.block.x = startPos.x;
+    cell.block.y = startPos.y;
+    const scatter = {
+      x: (Math.random() - 0.5) * 60,
+      y: (Math.random() - 0.5) * 60,
+    };
+    const scatterPos = { x: startPos.x + scatter.x, y: startPos.y + scatter.y };
+    infos.push({
+      cell,
+      startPos,
+      scatterPos,
+      finalPos: { x: dest.x + cell.x, y: dest.y + cell.y },
+      delay: Math.random() * 3,
+      rot: (Math.random() - 0.5) * 0.2,
+      pulse: Math.random() * Math.PI * 2,
+    });
+    createBlockExplosion(startPos);
   }
 
   let t = 0;
-  const duration = 30; // frames for animation
+  const scatterDuration = 10;
+  const gatherDuration = 25;
+
   const update = (delta) => {
     t += delta;
-    const p = Math.min(1, t / duration);
-    for (const cell of cube.grid) {
-      cell.block.x = start.x + (dest.x - start.x) * p + cell.x;
-      cell.block.y = start.y + (dest.y - start.y) * p + cell.y;
+    let allDone = true;
+    for (const info of infos) {
+      const b = info.cell.block;
+      b.rotation += info.rot * delta;
+      b.scale.set(1 + 0.05 * Math.sin((t + info.pulse) * 0.5));
+
+      if (t <= scatterDuration) {
+        const p = easeOutBack(Math.min(1, t / scatterDuration));
+        b.x = info.startPos.x + (info.scatterPos.x - info.startPos.x) * p;
+        b.y = info.startPos.y + (info.scatterPos.y - info.startPos.y) * p;
+        allDone = false;
+      } else {
+        const dt = t - scatterDuration - info.delay;
+        const p = Math.min(1, Math.max(0, dt / gatherDuration));
+        const e = easeInOutSine(p);
+        b.x = info.scatterPos.x + (info.finalPos.x - info.scatterPos.x) * e;
+        b.y = info.scatterPos.y + (info.finalPos.y - info.scatterPos.y) * e;
+        if (p < 1) allDone = false;
+      }
     }
-    if (p >= 1) {
+
+    if (allDone) {
       app.ticker.remove(update);
-      for (const cell of cube.grid) {
-        cube.addChild(cell.block);
-        cell.block.x = cell.x;
-        cell.block.y = cell.y;
+      for (const info of infos) {
+        cube.addChild(info.cell.block);
+        info.cell.block.x = info.cell.x;
+        info.cell.block.y = info.cell.y;
+        info.cell.block.rotation = 0;
+        info.cell.block.scale.set(1);
       }
       Body.setPosition(cube.body, dest);
       Body.setVelocity(cube.body, { x: 0, y: 0 });
