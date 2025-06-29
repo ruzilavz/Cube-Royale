@@ -664,7 +664,7 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
       cell.block.body = body;
       body.g = cell.block;
       const dir = Vector.normalise(
-        Vector.sub({ x: worldX + cube.blockSize / 2, y: worldY + cube.blockSize / 2 }, fromPos)
+        Vector.sub({ x: worldX + BLOCK_SIZE / 2, y: worldY + BLOCK_SIZE / 2 }, fromPos)
       );
       Body.setVelocity(body, { x: dir.x * 4, y: dir.y * 4 });
 
