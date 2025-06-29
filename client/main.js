@@ -209,7 +209,15 @@ function createCube(color, size, withPhysics = true) {
 }
 
 function updateCubeLayout(cube) {
-  if (cube.grid.length === 0) return;
+  if (cube.grid.length === 0) {
+    if (cube.body) {
+      MWorld.remove(engine.world, cube.body);
+      cube.body = null;
+    }
+    cube.size = 0;
+    cube.massSize = 0;
+    return;
+  }
 
   let sumX = 0,
     sumY = 0;
@@ -295,6 +303,10 @@ function destroyCube(cube) {
   }
   const bIdx = bots.indexOf(cube);
   if (bIdx !== -1) bots.splice(bIdx, 1);
+  if (cube.deathTimeout) {
+    clearTimeout(cube.deathTimeout);
+    cube.deathTimeout = null;
+  }
 }
 
 function spawnFood() {
@@ -366,6 +378,9 @@ function removeParticle(p) {
 }
 
 function collectParticle(cube, p) {
+  if (p.pickupCooldown && Date.now() < p.pickupCooldown) return;
+  if (!cube.body && cube.grid.length === 0) return;
+
   removeParticle(p);
   const block = new PIXI.Graphics();
   drawVoxel(block, cube.color);
@@ -375,6 +390,11 @@ function collectParticle(cube, p) {
   cube.addChild(block);
   cube.grid.push({ block, x: pos.x, y: pos.y });
   updateCubeLayout(cube);
+
+  if (cube.deathTimeout) {
+    clearTimeout(cube.deathTimeout);
+    cube.deathTimeout = null;
+  }
 }
 
 function createBots(count) {
@@ -491,6 +511,7 @@ function createFragmentFromCollision(size, pos, from, color) {
   frag.isFood = true;
   frag.isFragment = true;
   frag.alpha = 0.8;
+  frag.pickupCooldown = Date.now() + 500;
   frag.rotationSpeed = (Math.random() - 0.5) * 0.1;
   frag.pulseOffset = Math.random() * Math.PI * 2;
   if (PIXI.filters && PIXI.filters.DropShadowFilter) {
@@ -561,19 +582,26 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
   cube.hitTime = 12;
   cube.shakeTime = 12;
   updateCubeLayout(cube);
-  if (cube.grid.length === 0) {
-    if (cube.body) {
-      createDeathCloud(cube.body.position);
-    }
-    destroyCube(cube);
+  if (cube.grid.length === 0 && !cube.deathTimeout) {
+    cube.deathTimeout = setTimeout(() => {
+      if (cube.grid.length === 0) {
+        if (cube.body) {
+          createDeathCloud(cube.body.position);
+        }
+        destroyCube(cube);
+      }
+      cube.deathTimeout = null;
+    }, 600);
   }
 }
 
 function syncGraphics() {
   for (const c of cubes) {
     const shake = c.shakeTime > 0 ? 2 : 0;
-    c.x = c.body.position.x + (shake ? (Math.random() - 0.5) * shake : 0);
-    c.y = c.body.position.y + (shake ? (Math.random() - 0.5) * shake : 0);
+    if (c.body) {
+      c.x = c.body.position.x + (shake ? (Math.random() - 0.5) * shake : 0);
+      c.y = c.body.position.y + (shake ? (Math.random() - 0.5) * shake : 0);
+    }
     if (c.hitTime > 0) {
       c.hitTime -= 1;
       c.tint = 0xffaaaa;
@@ -586,7 +614,7 @@ function syncGraphics() {
     f.x = f.body.position.x;
     f.y = f.body.position.y;
   }
-  if (player) {
+  if (player && player.body) {
     world.x = app.screen.width / 2 - player.body.position.x;
     world.y = app.screen.height / 2 - player.body.position.y;
   }
