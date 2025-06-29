@@ -46,6 +46,7 @@ const MAX_PLAYER_SIZE = 250;
 const BLOCK_SIZE = 35;
 let cubeIdCounter = 0;
 const HIT_COOLDOWN = 500; // ms between damage from the same cube
+const SPEED_BASE = 4;
 
 const STYLES = {
   cheese: { path: 'assets/styles/cheese.png', color: 0xffe066 },
@@ -73,6 +74,10 @@ function lighten(color, amount) {
 function darken(color, amount) {
   const rgb = PIXI.utils.hex2rgb(color);
   return PIXI.utils.rgb2hex(rgb.map(c => Math.max(0, c - amount)));
+}
+
+function getMoveSpeed(cube) {
+  return SPEED_BASE / Math.sqrt(Math.max(1, cube.grid.length));
 }
 
 function drawVoxel(g, color) {
@@ -369,19 +374,24 @@ function destroyCube(cube) {
 }
 
 function spawnFood() {
-  const food = new PIXI.Graphics();
-  const size = 5;
-  food.beginFill(0xffcc00);
-  food.drawCircle(0, 0, size);
-  food.endFill();
+  const styleNames = Object.keys(STYLES);
+  const style = STYLES[styleNames[Math.floor(Math.random() * styleNames.length)]];
+  const food = new PIXI.Sprite(PIXI.Texture.from(style.path));
+  const size = BLOCK_SIZE;
+  food.width = size;
+  food.height = size;
   food.x = (Math.random() - 0.5) * WORLD_SIZE;
   food.y = (Math.random() - 0.5) * WORLD_SIZE;
   food.isFood = true;
   food.collected = false;
   food.massSize = size;
-  const body = Bodies.circle(food.x, food.y, size, { isSensor: true });
+  food.styleName = styleNames.find((n) => STYLES[n] === style);
+  const body = Bodies.rectangle(food.x, food.y, size, size, { isSensor: true });
   food.body = body;
   body.g = food;
+  if (PIXI.filters && PIXI.filters.DropShadowFilter) {
+    food.filters = [new PIXI.filters.DropShadowFilter({ distance: 1, blur: 2, alpha: 0.6 })];
+  }
   MWorld.add(engine.world, body);
   world.addChild(food);
   foods.push(food);
@@ -395,7 +405,7 @@ function gameLoop(delta, targetX, targetY) {
   const dy = targetY;
   const len = Vector.magnitude({ x: dx, y: dy });
   if (len > 0) {
-    const speed = 2;
+    const speed = getMoveSpeed(player);
     Body.translate(player.body, { x: (dx / len) * speed * delta, y: (dy / len) * speed * delta });
   }
   Engine.update(engine, delta * 16);
@@ -462,6 +472,27 @@ function collectParticle(cube, p) {
   cube.grid.push({ block, x: pos.x, y: pos.y });
   updateCubeLayout(cube);
 
+  if (cube.deathTimeout) {
+    clearTimeout(cube.deathTimeout);
+    cube.deathTimeout = null;
+  }
+}
+
+function growCube(cube, count = 1) {
+  for (let i = 0; i < count; i++) {
+    const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[cube.styleName].path));
+    block.width = BLOCK_SIZE;
+    block.height = BLOCK_SIZE;
+    if (PIXI.filters && PIXI.filters.DropShadowFilter) {
+      block.filters = [new PIXI.filters.DropShadowFilter({ distance: 1, blur: 2, alpha: 0.6 })];
+    }
+    const pos = getRandomGrowthPosition(cube);
+    block.x = pos.x;
+    block.y = pos.y;
+    cube.addChild(block);
+    cube.grid.push({ block, x: pos.x, y: pos.y });
+  }
+  updateCubeLayout(cube);
   if (cube.deathTimeout) {
     clearTimeout(cube.deathTimeout);
     cube.deathTimeout = null;
@@ -548,7 +579,7 @@ function updateBots(delta) {
     move = Vector.add(move, dir);
     if (move.x !== 0 || move.y !== 0) {
       move = Vector.normalise(move);
-      const speed = 2;
+      const speed = getMoveSpeed(bot);
       if (bot.body) {
         Body.translate(bot.body, { x: move.x * speed * delta, y: move.y * speed * delta });
       }
@@ -590,11 +621,26 @@ function collideCubes(c1, c2) {
   c1.lastHitTimes[c2.cid] = now;
   c2.lastHitTimes[c1.cid] = now;
 
-  // capture positions before any cube might lose its physics body
   const pos1 = { x: c1.body.position.x, y: c1.body.position.y };
   const pos2 = { x: c2.body.position.x, y: c2.body.position.y };
-  removeCubeBlocks(c1, 1, pos2);
-  removeCubeBlocks(c2, 1, pos1);
+
+  let bigger = c1;
+  let smaller = c2;
+  if (c2.grid.length > c1.grid.length) {
+    bigger = c2;
+    smaller = c1;
+  }
+
+  if (c1.grid.length === c2.grid.length) {
+    removeCubeBlocks(c1, 1, pos2);
+    removeCubeBlocks(c2, 1, pos1);
+  } else {
+    removeCubeBlocks(smaller, 1, bigger.body.position);
+    if (bigger.body) {
+      growCube(bigger, 1);
+    }
+  }
+
   if (!c1.body || !c2.body) return;
 
   const dir = Vector.normalise(Vector.sub(pos2, pos1));
