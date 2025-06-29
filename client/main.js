@@ -14,7 +14,9 @@ let app,
   remotePlayers = {},
   cubes = [],
   effects = [],
-  leaderboardContainer;
+  leaderboardContainer,
+  mouseMoveHandler,
+  touchMoveHandler;
 
 const { Engine, World: MWorld, Bodies, Body, Vector, Events } = Matter;
 
@@ -162,15 +164,17 @@ function initGame() {
 
   let targetX = 0;
   let targetY = 0;
-  window.addEventListener('mousemove', (e) => {
+  mouseMoveHandler = (e) => {
     targetX = e.clientX - app.screen.width / 2;
     targetY = e.clientY - app.screen.height / 2;
-  });
-  window.addEventListener('touchmove', (e) => {
+  };
+  touchMoveHandler = (e) => {
     const touch = e.touches[0];
     targetX = touch.clientX - app.screen.width / 2;
     targetY = touch.clientY - app.screen.height / 2;
-  });
+  };
+  window.addEventListener('mousemove', mouseMoveHandler);
+  window.addEventListener('touchmove', touchMoveHandler);
 
   app.ticker.add((delta) => gameLoop(delta, targetX, targetY));
   setInterval(updateLeaderboard, 500);
@@ -300,6 +304,7 @@ function destroyCube(cube) {
   world.removeChild(cube);
   if (cube === player) {
     player = null;
+    showGameOver();
   }
   const bIdx = bots.indexOf(cube);
   if (bIdx !== -1) bots.splice(bIdx, 1);
@@ -329,7 +334,7 @@ function spawnFood() {
 
 
 function gameLoop(delta, targetX, targetY) {
-  if (!player) return;
+  if (!player || !player.body) return;
   // движение игрока
   const dx = targetX;
   const dy = targetY;
@@ -364,7 +369,9 @@ function gameLoop(delta, targetX, targetY) {
   if (mode === 'pve') {
     updateBots(delta);
   } else if (mode === 'pvp' && socket) {
-    socket.emit('update', { x: player.body.position.x, y: player.body.position.y, size: player.size });
+    if (player && player.body) {
+      socket.emit('update', { x: player.body.position.x, y: player.body.position.y, size: player.size });
+    }
   }
 
   syncGraphics();
@@ -411,11 +418,12 @@ function createBots(count) {
 function updateBots(delta) {
   const SEP_DIST = 40;
   for (const bot of bots) {
+    if (!bot || !bot.body) continue;
     let move = { x: 0, y: 0 };
 
     // Separation so bots don't crowd
     for (const other of bots) {
-      if (other === bot) continue;
+      if (other === bot || !other.body) continue;
       const diff = Vector.sub(bot.body.position, other.body.position);
       const d = Vector.magnitude(diff);
       if (d > 0 && d < SEP_DIST) {
@@ -429,7 +437,7 @@ function updateBots(delta) {
     let threat = null;
     let threatDist = Infinity;
     for (const c of cubes) {
-      if (c === bot) continue;
+      if (c === bot || !c.body) continue;
       const d = Vector.magnitude(Vector.sub(c.body.position, bot.body.position));
       if (c.massSize < bot.massSize && d < preyDist) {
         prey = c;
@@ -444,6 +452,7 @@ function updateBots(delta) {
     let targetFood = null;
     let foodDist = Infinity;
     for (const f of foods) {
+      if (!f || !f.body) continue;
       const d = Vector.magnitude(Vector.sub(f.body.position, bot.body.position));
       if (d < foodDist) {
         targetFood = f;
@@ -452,13 +461,13 @@ function updateBots(delta) {
     }
 
     let dir = null;
-    if (threat && threatDist < 250) {
+    if (threat && threat.body && threatDist < 250) {
       dir = Vector.sub(bot.body.position, threat.body.position);
-    } else if (prey && preyDist < 400) {
+    } else if (prey && prey.body && preyDist < 400) {
       if (preyDist > 120) {
         dir = Vector.sub(prey.body.position, bot.body.position);
       }
-    } else if (targetFood && foodDist < 500) {
+    } else if (targetFood && targetFood.body && foodDist < 500) {
       dir = Vector.sub(targetFood.body.position, bot.body.position);
     }
 
@@ -473,7 +482,9 @@ function updateBots(delta) {
     if (move.x !== 0 || move.y !== 0) {
       move = Vector.normalise(move);
       const speed = 2;
-      Body.translate(bot.body, { x: move.x * speed * delta, y: move.y * speed * delta });
+      if (bot.body) {
+        Body.translate(bot.body, { x: move.x * speed * delta, y: move.y * speed * delta });
+      }
     }
   }
 }
@@ -485,20 +496,24 @@ function handleCollisions(event) {
     const b = pair.bodyB.g;
     if (!a || !b) continue;
     if (a.isCube && b.isCube && a !== b) {
+      if (!a.body || !b.body) continue;
       const key = a.cid < b.cid ? `${a.cid}-${b.cid}` : `${b.cid}-${a.cid}`;
       if (!processed.has(key)) {
         collideCubes(a, b);
         processed.add(key);
       }
     } else if (a.isCube && b.isFood) {
+      if (!a.body || !b.body) continue;
       collectParticle(a, b);
     } else if (b.isCube && a.isFood) {
+      if (!a.body || !b.body) continue;
       collectParticle(b, a);
     }
   }
 }
 
 function collideCubes(c1, c2) {
+  if (!c1 || !c2 || !c1.body || !c2.body) return;
   removeCubeBlocks(c1, 1, c2.body.position);
   removeCubeBlocks(c2, 1, c1.body.position);
 }
@@ -687,4 +702,43 @@ function updateLeaderboard() {
     text.y = i * 16;
     leaderboardContainer.addChild(text);
   });
+}
+
+function showGameOver() {
+  if (!app) return;
+  const style = new PIXI.TextStyle({
+    fill: '#ff4444',
+    fontSize: 48,
+    fontWeight: 'bold',
+    stroke: '#000000',
+    strokeThickness: 4,
+    align: 'center',
+  });
+  const text = new PIXI.Text('Вы проиграли!', style);
+  text.anchor.set(0.5);
+  text.x = app.screen.width / 2;
+  text.y = app.screen.height / 2;
+  if (PIXI.filters && PIXI.filters.DropShadowFilter) {
+    text.filters = [new PIXI.filters.DropShadowFilter({ distance: 2, blur: 2, alpha: 0.7 })];
+  }
+  app.stage.addChild(text);
+
+  if (mouseMoveHandler) window.removeEventListener('mousemove', mouseMoveHandler);
+  if (touchMoveHandler) window.removeEventListener('touchmove', touchMoveHandler);
+
+  setTimeout(() => {
+    if (typeof goToMainMenu === 'function') {
+      try {
+        goToMainMenu();
+      } catch (e) {
+        location.reload();
+      }
+    } else {
+      location.reload();
+    }
+  }, 3000);
+}
+
+function goToMainMenu() {
+  location.reload();
 }
