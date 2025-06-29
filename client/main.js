@@ -32,7 +32,7 @@ const { Engine, World: MWorld, Bodies, Body, Vector, Events } = Matter;
 const WORLD_SIZE = 5000;
 const FOOD_COUNT = 250;
 const MAX_PLAYER_SIZE = 250;
-const BLOCK_SIZE = 10;
+const BLOCK_SIZE = 20;
 let cubeIdCounter = 0;
 
 const STYLES = {
