@@ -47,7 +47,7 @@ const BLOCK_SIZE = 35;
 const FOOD_SIZE = 25;
 let cubeIdCounter = 0;
 const HIT_COOLDOWN = 500; // ms between damage from the same cube
-const SPEED_BASE = 4;
+const SPEED_BASE = 2;
 let globalTime = 0;
 
 const STYLES = {
