@@ -76,7 +76,7 @@ const STYLES = {
 
 let selectedStyle = 'cheese';
 
-const BOT_SNAKE_PROB = 0.001; // 0.1% chance per tick
+const BOT_SNAKE_PROB = 0.0005; // 0.05% chance per tick
 
 function initSnakeProps(cube) {
   cube.isSnake = false;
@@ -120,6 +120,10 @@ function toggleSnake(cube = player) {
     }
     cube.snakeSegments = newSegments;
     updateCubeLayout(cube);
+    if (cube.body) cube.body.collisionFilter.group = -cube.cid;
+    for (const seg of cube.snakeSegments) {
+      if (seg.body) seg.body.collisionFilter.group = -cube.cid;
+    }
     cube.isSnake = true;
   } else {
     const segCount = cube.snakeSegments.length;
@@ -140,6 +144,7 @@ function toggleSnake(cube = player) {
     }
     cube.savedSnakeGrid = [];
     updateCubeLayout(cube);
+    if (cube.body) cube.body.collisionFilter.group = 0;
     cube.isSnake = false;
   }
 }
@@ -153,6 +158,7 @@ function addSnakeSegment(cube = player) {
     base = segments[segments.length - 1].body.position;
   }
   Body.setPosition(seg.body, { x: base.x - CELL_SIZE, y: base.y });
+  if (seg.body) seg.body.collisionFilter.group = -cube.cid;
   world.addChild(seg);
   segments.push(seg);
 }
@@ -789,6 +795,7 @@ function updateBots(delta) {
 }
 
 function updateSnakeSegments(delta, cube) {
+  if (!cube.body) return;
   let prevPos = cube.body.position;
   for (const seg of cube.snakeSegments) {
     if (!seg.body) continue;
