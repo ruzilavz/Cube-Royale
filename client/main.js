@@ -46,7 +46,8 @@ const MAX_PLAYER_SIZE = 250;
 const BLOCK_SIZE = 35;
 let cubeIdCounter = 0;
 const HIT_COOLDOWN = 500; // ms between damage from the same cube
-const SPEED_BASE = 4;
+const SPEED_BASE = 8;
+let globalTime = 0;
 
 const STYLES = {
   cheese: { path: 'assets/styles/cheese.png', color: 0xffe066 },
@@ -76,8 +77,8 @@ function darken(color, amount) {
   return PIXI.utils.rgb2hex(rgb.map(c => Math.max(0, c - amount)));
 }
 
-function getMoveSpeed(cube) {
-  return SPEED_BASE / Math.sqrt(Math.max(1, cube.grid.length));
+function getMoveSpeed() {
+  return SPEED_BASE;
 }
 
 function drawVoxel(g, color) {
@@ -386,6 +387,8 @@ function spawnFood() {
   food.collected = false;
   food.massSize = size;
   food.styleName = styleNames.find((n) => STYLES[n] === style);
+  food.rotationSpeed = (Math.random() - 0.5) * 0.05;
+  food.pulseOffset = Math.random() * Math.PI * 2;
   const body = Bodies.rectangle(food.x, food.y, size, size, { isSensor: true });
   food.body = body;
   body.g = food;
@@ -405,14 +408,19 @@ function gameLoop(delta, targetX, targetY) {
   const dy = targetY;
   const len = Vector.magnitude({ x: dx, y: dy });
   if (len > 0) {
-    const speed = getMoveSpeed(player);
+    const speed = getMoveSpeed();
     Body.translate(player.body, { x: (dx / len) * speed * delta, y: (dy / len) * speed * delta });
   }
   Engine.update(engine, delta * 16);
 
+  globalTime += delta;
   for (const f of foods) {
-    if (f.isFragment) {
+    if (f.rotationSpeed) {
       f.rotation += f.rotationSpeed * delta;
+    }
+    if (f.pulseOffset !== undefined) {
+      const scale = 1 + Math.sin(globalTime * 0.1 + f.pulseOffset) * 0.1;
+      f.scale.set(scale);
     }
   }
 
@@ -631,14 +639,15 @@ function collideCubes(c1, c2) {
     smaller = c1;
   }
 
-  if (c1.grid.length === c2.grid.length) {
+  if (bigger.grid.length > smaller.grid.length) {
+    const gain = smaller.grid.length;
+    destroyCube(smaller);
+    if (bigger.body) {
+      growCube(bigger, gain);
+    }
+  } else {
     removeCubeBlocks(c1, 1, pos2);
     removeCubeBlocks(c2, 1, pos1);
-  } else {
-    removeCubeBlocks(smaller, 1, bigger.body.position);
-    if (bigger.body) {
-      growCube(bigger, 1);
-    }
   }
 
   if (!c1.body || !c2.body) return;
