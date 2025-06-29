@@ -35,6 +35,7 @@ const MAX_PLAYER_SIZE = 250;
 const BLOCK_SIZE = 35;
 let cubeIdCounter = 0;
 const HIT_COOLDOWN = 500; // ms between damage from the same cube
+const TELEPORT_RADIUS = 250; // max distance for cube jump
 
 const STYLES = {
   cheese: { path: 'assets/styles/cheese.png', color: 0xffe066 },
@@ -196,6 +197,31 @@ function initGame() {
   };
   window.addEventListener('mousemove', mouseMoveHandler);
   window.addEventListener('touchmove', touchMoveHandler);
+
+  const teleportHandler = (x, y) => {
+    if (!player || player.isTeleporting) return;
+    const worldX = x - app.screen.width / 2 + player.body.position.x;
+    const worldY = y - app.screen.height / 2 + player.body.position.y;
+    const dx = worldX - player.body.position.x;
+    const dy = worldY - player.body.position.y;
+    const dist = Vector.magnitude({ x: dx, y: dy });
+    let tx = worldX;
+    let ty = worldY;
+    if (dist > TELEPORT_RADIUS) {
+      const dir = Vector.normalise({ x: dx, y: dy });
+      tx = player.body.position.x + dir.x * TELEPORT_RADIUS;
+      ty = player.body.position.y + dir.y * TELEPORT_RADIUS;
+    }
+    teleportCube(player, { x: tx, y: ty });
+  };
+
+  app.view.addEventListener('mousedown', (e) => {
+    if (e.button === 0) teleportHandler(e.clientX, e.clientY);
+  });
+  app.view.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    teleportHandler(t.clientX, t.clientY);
+  });
 
   app.ticker.add((delta) => gameLoop(delta, targetX, targetY));
   setInterval(updateLeaderboard, 500);
@@ -372,12 +398,14 @@ function spawnFood() {
 function gameLoop(delta, targetX, targetY) {
   if (!player || !player.body) return;
   // движение игрока
-  const dx = targetX;
-  const dy = targetY;
-  const len = Vector.magnitude({ x: dx, y: dy });
-  if (len > 0) {
-    const speed = 2;
-    Body.translate(player.body, { x: (dx / len) * speed * delta, y: (dy / len) * speed * delta });
+  if (!player.isTeleporting) {
+    const dx = targetX;
+    const dy = targetY;
+    const len = Vector.magnitude({ x: dx, y: dy });
+    if (len > 0) {
+      const speed = 2;
+      Body.translate(player.body, { x: (dx / len) * speed * delta, y: (dy / len) * speed * delta });
+    }
   }
   Engine.update(engine, delta * 16);
 
@@ -447,6 +475,46 @@ function collectParticle(cube, p) {
     clearTimeout(cube.deathTimeout);
     cube.deathTimeout = null;
   }
+}
+
+function teleportCube(cube, dest) {
+  if (!cube || cube.isTeleporting) return;
+  const start = { x: cube.body.position.x, y: cube.body.position.y };
+  cube.isTeleporting = true;
+  MWorld.remove(engine.world, cube.body);
+  cube.visible = false;
+
+  for (const cell of cube.grid) {
+    world.addChild(cell.block);
+    cell.block.x = start.x + cell.x;
+    cell.block.y = start.y + cell.y;
+  }
+
+  let t = 0;
+  const duration = 30; // frames for animation
+  const update = (delta) => {
+    t += delta;
+    const p = Math.min(1, t / duration);
+    for (const cell of cube.grid) {
+      cell.block.x = start.x + (dest.x - start.x) * p + cell.x;
+      cell.block.y = start.y + (dest.y - start.y) * p + cell.y;
+    }
+    if (p >= 1) {
+      app.ticker.remove(update);
+      for (const cell of cube.grid) {
+        cube.addChild(cell.block);
+        cell.block.x = cell.x;
+        cell.block.y = cell.y;
+      }
+      Body.setPosition(cube.body, dest);
+      Body.setVelocity(cube.body, { x: 0, y: 0 });
+      MWorld.add(engine.world, cube.body);
+      cube.visible = true;
+      cube.isTeleporting = false;
+    }
+  };
+
+  app.ticker.add(update);
 }
 
 function createBots(count) {
