@@ -575,6 +575,7 @@ function collideCubes(c1, c2) {
   const pos2 = { x: c2.body.position.x, y: c2.body.position.y };
   removeCubeBlocks(c1, 1, pos2);
   removeCubeBlocks(c2, 1, pos1);
+  if (!c1.body || !c2.body) return;
 
   const dir = Vector.normalise(Vector.sub(pos2, pos1));
   if (dir.x || dir.y) {
