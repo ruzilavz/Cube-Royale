@@ -76,10 +76,14 @@ const STYLES = {
 
 let selectedStyle = 'cheese';
 
-let isSnake = false;
-let snakeSegments = [];
-let lastSnakeToggle = 0;
-let savedSnakeGrid = [];
+const BOT_SNAKE_PROB = 0.001; // 0.1% chance per tick
+
+function initSnakeProps(cube) {
+  cube.isSnake = false;
+  cube.snakeSegments = [];
+  cube.lastSnakeToggle = 0;
+  cube.savedSnakeGrid = [];
+}
 
 function lighten(color, amount) {
   const rgb = PIXI.utils.hex2rgb(color);
@@ -91,66 +95,79 @@ function darken(color, amount) {
   return PIXI.utils.rgb2hex(rgb.map(c => Math.max(0, c - amount)));
 }
 
-function toggleSnake() {
+function toggleSnake(cube = player) {
   const now = Date.now();
-  if (!player || now - lastSnakeToggle < SNAKE_COOLDOWN) return;
-  lastSnakeToggle = now;
-  if (!isSnake) {
+  if (!cube || now - cube.lastSnakeToggle < SNAKE_COOLDOWN) return;
+  cube.lastSnakeToggle = now;
+  if (!cube.isSnake) {
     const newSegments = [];
-    const bodyCells = player.grid.filter((c) => c.size === BLOCK_SIZE);
-    savedSnakeGrid = bodyCells.map((c) => ({ x: c.x, y: c.y }));
-    player.grid = player.grid.filter((c) => c.size !== BLOCK_SIZE);
-    player.massSize -= bodyCells.length;
+    const bodyCells = cube.grid.filter((c) => c.size === BLOCK_SIZE);
+    cube.savedSnakeGrid = bodyCells.map((c) => ({ x: c.x, y: c.y }));
+    cube.grid = cube.grid.filter((c) => c.size !== BLOCK_SIZE);
+    cube.massSize -= bodyCells.length;
     for (const cell of bodyCells) {
-      player.removeChild(cell.block);
-      const seg = createCube(player.styleName, BLOCK_SIZE, 1, true, 1);
-      Body.setPosition(seg.body, {
-        x: player.body.position.x - (newSegments.length + 1) * CELL_SIZE,
-        y: player.body.position.y,
-      });
+      cube.removeChild(cell.block);
+      const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
+      seg.parentCube = cube;
+      if (cube.body) {
+        Body.setPosition(seg.body, {
+          x: cube.body.position.x - (newSegments.length + 1) * CELL_SIZE,
+          y: cube.body.position.y,
+        });
+      }
       world.addChild(seg);
       newSegments.push(seg);
     }
-    snakeSegments = newSegments;
-    updateCubeLayout(player);
-    isSnake = true;
+    cube.snakeSegments = newSegments;
+    updateCubeLayout(cube);
+    cube.isSnake = true;
   } else {
-    const segCount = snakeSegments.length;
-    for (const seg of snakeSegments) {
+    const segCount = cube.snakeSegments.length;
+    for (const seg of cube.snakeSegments) {
       destroyCube(seg);
     }
-    snakeSegments = [];
+    cube.snakeSegments = [];
     for (let i = 0; i < segCount; i++) {
-      const pos = savedSnakeGrid[i] || getRandomGrowthPosition(player);
-      const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[player.styleName].path));
+      const pos = cube.savedSnakeGrid[i] || getRandomGrowthPosition(cube);
+      const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[cube.styleName].path));
       block.width = BLOCK_SIZE;
       block.height = BLOCK_SIZE;
       block.x = pos.x;
       block.y = pos.y;
-      player.addChild(block);
-      player.grid.push({ block, x: pos.x, y: pos.y, size: BLOCK_SIZE });
-      player.massSize += 1;
+      cube.addChild(block);
+      cube.grid.push({ block, x: pos.x, y: pos.y, size: BLOCK_SIZE });
+      cube.massSize += 1;
     }
-    savedSnakeGrid = [];
-    updateCubeLayout(player);
-    isSnake = false;
+    cube.savedSnakeGrid = [];
+    updateCubeLayout(cube);
+    cube.isSnake = false;
   }
 }
 
-function addSnakeSegment() {
-  const seg = createCube(player.styleName, BLOCK_SIZE, 1, true, 1);
-  let base = player.body.position;
-  if (snakeSegments.length > 0 && snakeSegments[snakeSegments.length - 1].body) {
-    base = snakeSegments[snakeSegments.length - 1].body.position;
+function addSnakeSegment(cube = player) {
+  const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
+  seg.parentCube = cube;
+  let base = cube.body.position;
+  const segments = cube.snakeSegments;
+  if (segments.length > 0 && segments[segments.length - 1].body) {
+    base = segments[segments.length - 1].body.position;
   }
-  Body.setPosition(seg.body, { x: base.x, y: base.y });
+  Body.setPosition(seg.body, { x: base.x - CELL_SIZE, y: base.y });
   world.addChild(seg);
-  snakeSegments.push(seg);
+  segments.push(seg);
 }
 
 function getMoveSpeed(cube = player) {
-  if (cube === player && isSnake) return SNAKE_SPEED;
+  if (cube.isSnake || cube.parentCube?.isSnake) return SNAKE_SPEED;
   return SPEED_BASE;
+}
+
+function getTotalMass(cube) {
+  let m = cube.massSize;
+  if (cube.snakeSegments) {
+    for (const s of cube.snakeSegments) m += s.massSize;
+  }
+  return m;
 }
 
 function drawVoxel(g, color) {
@@ -309,6 +326,7 @@ function createCube(styleName, blockSize = BLOCK_SIZE, mass = null, withPhysics 
   container.isCube = true;
   container.withPhysics = withPhysics;
   container.grid = [];
+  initSnakeProps(container);
   const size = blockSize * cells;
   for (let i = 0; i < cells; i++) {
     for (let j = 0; j < cells; j++) {
@@ -438,8 +456,11 @@ function destroyCube(cube) {
     if (idx !== -1) cubes.splice(idx, 1);
   }
   world.removeChild(cube);
-  const sIdx = snakeSegments.indexOf(cube);
-  if (sIdx !== -1) snakeSegments.splice(sIdx, 1);
+  if (cube.parentCube) {
+    const owner = cube.parentCube;
+    const idx = owner.snakeSegments.indexOf(cube);
+    if (idx !== -1) owner.snakeSegments.splice(idx, 1);
+  }
   if (cube === player) {
     player = null;
     showGameOver();
@@ -495,8 +516,11 @@ function gameLoop(delta, targetX, targetY) {
     Body.translate(player.body, { x: (dx / len) * speed * delta, y: (dy / len) * speed * delta });
   }
 
-  if (isSnake) {
-    updateSnakeSegments(delta);
+  if (player.isSnake) {
+    updateSnakeSegments(delta, player);
+  }
+  for (const bot of bots) {
+    if (bot.isSnake) updateSnakeSegments(delta, bot);
   }
   Engine.update(engine, delta * 16);
 
@@ -557,8 +581,12 @@ function collectParticle(cube, p) {
   p.collected = true;
 
   removeParticle(p);
-  if (isSnake && (cube === player || snakeSegments.includes(cube))) {
-    addSnakeSegment();
+  if (cube.isSnake) {
+    addSnakeSegment(cube);
+    return;
+  }
+  if (cube.parentCube && cube.parentCube.isSnake) {
+    addSnakeSegment(cube.parentCube);
     return;
   }
   const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[cube.styleName].path));
@@ -591,8 +619,12 @@ function collectParticle(cube, p) {
 
 function growCube(cube, count = 1) {
   for (let i = 0; i < count; i++) {
-    if (isSnake && (cube === player || snakeSegments.includes(cube))) {
-      addSnakeSegment();
+    if (cube.isSnake) {
+      addSnakeSegment(cube);
+      continue;
+    }
+    if (cube.parentCube && cube.parentCube.isSnake) {
+      addSnakeSegment(cube.parentCube);
       continue;
     }
     const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[cube.styleName].path));
@@ -636,7 +668,7 @@ function processEating(delta) {
       c.eatTarget = null;
       continue;
     }
-    if (t.massSize >= c.massSize) {
+    if (getTotalMass(t) >= getTotalMass(c)) {
       c.eatTarget = null;
       continue;
     }
@@ -648,7 +680,7 @@ function processEating(delta) {
     c.eatTimer = (c.eatTimer || 0) + delta;
     if (c.eatTimer >= EAT_INTERVAL) {
       c.eatTimer = 0;
-      if (c.massSize > t.massSize) {
+      if (getTotalMass(c) > getTotalMass(t)) {
         removeCubeBlocks(t, 1, c.body.position, {
           toward: true,
           ownerId: c.cid,
@@ -695,6 +727,10 @@ function updateBots(delta) {
       }
     }
 
+    if (Math.random() < BOT_SNAKE_PROB) {
+      toggleSnake(bot);
+    }
+
     let prey = null;
     let preyDist = Infinity;
     let threat = null;
@@ -702,11 +738,11 @@ function updateBots(delta) {
     for (const c of cubes) {
       if (c === bot || !c.body) continue;
       const d = Vector.magnitude(Vector.sub(c.body.position, bot.body.position));
-      if (c.massSize < bot.massSize && d < preyDist) {
+      if (getTotalMass(c) < getTotalMass(bot) && d < preyDist) {
         prey = c;
         preyDist = d;
       }
-      if (c.massSize > bot.massSize && d < threatDist) {
+      if (getTotalMass(c) > getTotalMass(bot) && d < threatDist) {
         threat = c;
         threatDist = d;
       }
@@ -752,9 +788,9 @@ function updateBots(delta) {
   }
 }
 
-function updateSnakeSegments(delta) {
-  let prevPos = player.body.position;
-  for (const seg of snakeSegments) {
+function updateSnakeSegments(delta, cube) {
+  let prevPos = cube.body.position;
+  for (const seg of cube.snakeSegments) {
     if (!seg.body) continue;
     const dir = Vector.sub(prevPos, seg.body.position);
     const dist = Vector.magnitude(dir);
@@ -818,14 +854,14 @@ function collideCubes(c1, c2) {
 
   let bigger = c1;
   let smaller = c2;
-  if (c2.massSize > c1.massSize) {
+  if (getTotalMass(c2) > getTotalMass(c1)) {
     bigger = c2;
     smaller = c1;
   }
 
-  if (smaller === player && isSnake && snakeSegments.length > 0) {
+  if (smaller === player && player.isSnake && player.snakeSegments.length > 0) {
     // head cannot be eaten until segments are gone
-  } else if (bigger.massSize > smaller.massSize && isCubeEngulfed(bigger, smaller)) {
+  } else if (getTotalMass(bigger) > getTotalMass(smaller) && isCubeEngulfed(bigger, smaller)) {
     startEating(bigger, smaller);
   } else {
     removeCubeBlocks(c1, 1, pos2);
@@ -900,11 +936,11 @@ function createDeathCloud(pos) {
 }
 
 function removeCubeBlocks(cube, count = 1, fromPos, options = {}) {
-  if (cube === player && isSnake && snakeSegments.length > 0) {
-    const target = snakeSegments[snakeSegments.length - 1];
+  if (cube.isSnake && cube.snakeSegments.length > 0) {
+    const target = cube.snakeSegments[cube.snakeSegments.length - 1];
     removeCubeBlocks(target, count, fromPos, options);
     if (target.grid.length === 0) {
-      snakeSegments.pop();
+      cube.snakeSegments.pop();
     }
     return;
   }
@@ -1074,7 +1110,7 @@ function updateLeaderboard() {
     entries.push({
       name: 'You',
       color: player.color,
-      mass: player.massSize,
+      mass: getTotalMass(player),
       style: player.styleName,
       me: true
     });
@@ -1084,7 +1120,7 @@ function updateLeaderboard() {
     entries.push({
       name: 'Bot',
       color: bot.color,
-      mass: bot.massSize,
+      mass: getTotalMass(bot),
       style: bot.styleName
     });
   }
