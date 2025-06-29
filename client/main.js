@@ -474,6 +474,7 @@ function collectParticle(cube, p) {
   if (p.collected) return;
   if (p.pickupCooldown && Date.now() < p.pickupCooldown) return;
   if (p.enemyCooldown && p.ownerId && p.ownerId !== cube.cid && Date.now() < p.enemyCooldown) return;
+  if (p.forbidOwner && p.sourceId === cube.cid) return;
   if (!cube.body && cube.grid.length === 0) return;
 
   p.collected = true;
@@ -550,6 +551,10 @@ function processEating(delta) {
       c.eatTarget = null;
       continue;
     }
+    if (t.massSize >= c.massSize) {
+      c.eatTarget = null;
+      continue;
+    }
     const dist = Vector.magnitude(Vector.sub(c.body.position, t.body.position));
     if (dist > c.size + t.size) {
       c.eatTarget = null;
@@ -558,9 +563,15 @@ function processEating(delta) {
     c.eatTimer = (c.eatTimer || 0) + delta;
     if (c.eatTimer >= EAT_INTERVAL) {
       c.eatTimer = 0;
-      removeCubeBlocks(t, 1, c.body.position);
-      if (c.body) {
-        growCube(c, 1);
+      if (c.massSize > t.massSize) {
+        removeCubeBlocks(t, 1, c.body.position, {
+          toward: true,
+          ownerId: c.cid,
+          forbidOwner: true,
+        });
+      } else {
+        c.eatTarget = null;
+        continue;
       }
       if (t.grid.length === 0) {
         c.eatTarget = null;
@@ -774,7 +785,7 @@ function createDeathCloud(pos) {
   effects.push(e);
 }
 
-function removeCubeBlocks(cube, count = 1, fromPos) {
+function removeCubeBlocks(cube, count = 1, fromPos, options = {}) {
   for (let i = 0; i < count && cube.grid.length > 0; i++) {
     let idx = cube.grid.findIndex((c) => c.size === BLOCK_SIZE);
     if (idx === -1) {
@@ -800,7 +811,9 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
       if (cell.block.pivot) cell.block.pivot.set(0);
       cell.block.rotation = 0;
       cell.block.alpha = 1;
-      cell.block.ownerId = cube.cid;
+      cell.block.ownerId = options.ownerId !== undefined ? options.ownerId : cube.cid;
+      cell.block.sourceId = cube.cid;
+      cell.block.forbidOwner = !!options.forbidOwner;
       cell.block.styleName = cube.styleName;
       cell.block.pickupCooldown = Date.now() + 1000;
       cell.block.enemyCooldown = Date.now() + 3000;
@@ -823,9 +836,12 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
       );
       cell.block.body = body;
       body.g = cell.block;
-      const dir = Vector.normalise(
-        Vector.sub({ x: worldX + cell.size / 2, y: worldY + cell.size / 2 }, fromPos)
+      let diff = Vector.sub(
+        { x: worldX + cell.size / 2, y: worldY + cell.size / 2 },
+        fromPos
       );
+      if (options.toward) diff = Vector.mult(diff, -1);
+      const dir = Vector.normalise(diff);
       Body.setVelocity(body, { x: dir.x * 4, y: dir.y * 4 });
 
       MWorld.add(engine.world, body);
