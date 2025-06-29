@@ -49,6 +49,7 @@ const CELL_SIZE = BLOCK_SIZE + SPACING;
 const FOOD_SIZE = 25;
 let cubeIdCounter = 0;
 const HIT_COOLDOWN = 500; // ms between damage from the same cube
+const EAT_INTERVAL = 15; // ticks between consuming blocks during eating
 const SPEED_BASE = 2;
 let globalTime = 0;
 
@@ -375,6 +376,11 @@ function destroyCube(cube) {
     clearTimeout(cube.deathTimeout);
     cube.deathTimeout = null;
   }
+  for (const c of cubes) {
+    if (c.eatTarget === cube) {
+      c.eatTarget = null;
+    }
+  }
 }
 
 function spawnFood() {
@@ -449,6 +455,8 @@ function gameLoop(delta, targetX, targetY) {
     }
   }
 
+  processEating(delta);
+
   syncGraphics();
 }
 
@@ -509,6 +517,39 @@ function growCube(cube, count = 1) {
   if (cube.deathTimeout) {
     clearTimeout(cube.deathTimeout);
     cube.deathTimeout = null;
+  }
+}
+
+function startEating(winner, loser) {
+  if (!winner || !loser) return;
+  winner.eatTarget = loser;
+  winner.eatTimer = 0;
+}
+
+function processEating(delta) {
+  for (const c of cubes) {
+    if (!c.eatTarget) continue;
+    const t = c.eatTarget;
+    if (!t.body || t.grid.length === 0) {
+      c.eatTarget = null;
+      continue;
+    }
+    const dist = Vector.magnitude(Vector.sub(c.body.position, t.body.position));
+    if (dist > c.size + t.size) {
+      c.eatTarget = null;
+      continue;
+    }
+    c.eatTimer = (c.eatTimer || 0) + delta;
+    if (c.eatTimer >= EAT_INTERVAL) {
+      c.eatTimer = 0;
+      removeCubeBlocks(t, 1, c.body.position);
+      if (c.body) {
+        growCube(c, 1);
+      }
+      if (t.grid.length === 0) {
+        c.eatTarget = null;
+      }
+    }
   }
 }
 
@@ -645,11 +686,7 @@ function collideCubes(c1, c2) {
   }
 
   if (bigger.grid.length > smaller.grid.length) {
-    const gain = smaller.grid.length;
-    destroyCube(smaller);
-    if (bigger.body) {
-      growCube(bigger, gain);
-    }
+    startEating(bigger, smaller);
   } else {
     removeCubeBlocks(c1, 1, pos2);
     removeCubeBlocks(c2, 1, pos1);
