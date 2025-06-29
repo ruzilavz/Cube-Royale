@@ -583,18 +583,44 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
     const cell = cube.grid.splice(idx, 1)[0];
     cube.removeChild(cell.block);
     if (cube.body) {
-      const pos = {
-        x: cube.body.position.x + cell.x + cube.blockSize / 2,
-        y: cube.body.position.y + cell.y + cube.blockSize / 2,
-      };
-      const frag = createFragmentFromCollision(
+      const worldX = cube.body.position.x + cell.x;
+      const worldY = cube.body.position.y + cell.y;
+
+      cell.block.x = worldX;
+      cell.block.y = worldY;
+      cell.block.isFood = true;
+      cell.block.isFragment = true;
+      cell.block.alpha = 0.8;
+      cell.block.pickupCooldown = Date.now() + 500;
+      cell.block.rotationSpeed = (Math.random() - 0.5) * 0.1;
+      cell.block.pulseOffset = Math.random() * Math.PI * 2;
+      if (PIXI.filters && PIXI.filters.DropShadowFilter) {
+        cell.block.filters = [new PIXI.filters.DropShadowFilter({
+          distance: 2,
+          alpha: 0.5,
+          blur: 2,
+        })];
+      }
+
+      const body = Bodies.rectangle(
+        worldX + cube.blockSize / 2,
+        worldY + cube.blockSize / 2,
         cube.blockSize,
-        pos,
-        fromPos,
-        cube.color
+        cube.blockSize,
+        { isSensor: true, frictionAir: 0.15 }
       );
-      world.addChild(frag);
-      createBlockExplosion(pos);
+      cell.block.body = body;
+      body.g = cell.block;
+      const dir = Vector.normalise(
+        Vector.sub({ x: worldX + cube.blockSize / 2, y: worldY + cube.blockSize / 2 }, fromPos)
+      );
+      Body.setVelocity(body, { x: dir.x * 4, y: dir.y * 4 });
+
+      MWorld.add(engine.world, body);
+      foods.push(cell.block);
+      world.addChild(cell.block);
+
+      createBlockExplosion({ x: worldX + cube.blockSize / 2, y: worldY + cube.blockSize / 2 });
     }
   }
   cube.hitTime = 12;
