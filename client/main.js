@@ -52,6 +52,8 @@ const HIT_COOLDOWN = 500; // ms between damage from the same cube
 const EAT_INTERVAL = 15; // ticks between consuming blocks during eating
 const SPEED_BASE = 2;
 let globalTime = 0;
+const BIG_CUBE_SIZE = 60;
+const BIG_CUBE_MASS = 10;
 
 const STYLES = {
   cheese: { path: 'assets/styles/cheese.png', color: 0xffe066 },
@@ -196,7 +198,7 @@ function initGame() {
   cubes = [];
   effects = [];
 
-  player = createCube(selectedStyle, BLOCK_SIZE * 2); // start with 4 blocks
+  player = createCube(selectedStyle, BIG_CUBE_SIZE, BIG_CUBE_MASS, true, 1);
   Body.setPosition(player.body, { x: 0, y: 0 });
   world.addChild(player);
 
@@ -230,36 +232,35 @@ function initGame() {
   setInterval(updateLeaderboard, 500);
 }
 
-function createCube(styleName, size, withPhysics = true) {
+function createCube(styleName, blockSize = BLOCK_SIZE, mass = null, withPhysics = true, cells = 1) {
   const container = new PIXI.Container();
   container.cid = cubeIdCounter++;
-  container.size = size;
   container.styleName = styleName;
   container.color = STYLES[styleName].color;
   container.isCube = true;
   container.withPhysics = withPhysics;
   container.grid = [];
-  const count = Math.round(size / BLOCK_SIZE);
-  for (let i = 0; i < count; i++) {
-    for (let j = 0; j < count; j++) {
+  const size = blockSize * cells;
+  for (let i = 0; i < cells; i++) {
+    for (let j = 0; j < cells; j++) {
       const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[styleName].path));
-      block.width = BLOCK_SIZE;
-      block.height = BLOCK_SIZE;
+      block.width = blockSize;
+      block.height = blockSize;
       if (PIXI.filters && PIXI.filters.DropShadowFilter) {
         block.filters = [
           new PIXI.filters.DropShadowFilter({ distance: 1, blur: 2, alpha: 0.6 })
         ];
       }
-      const bx = -size / 2 + i * BLOCK_SIZE;
-      const by = -size / 2 + j * BLOCK_SIZE;
+      const bx = -size / 2 + i * blockSize;
+      const by = -size / 2 + j * blockSize;
       block.x = bx;
       block.y = by;
       container.addChild(block);
-      container.grid.push({ block, x: bx, y: by });
+      container.grid.push({ block, x: bx, y: by, size: blockSize });
     }
   }
-  container.massSize = container.grid.length;
-  container.blockSize = BLOCK_SIZE;
+  container.massSize = mass !== null ? mass : container.grid.length;
+  container.blockSize = blockSize;
   container.hitTime = 0;
   container.lastHitTimes = {}; // track recent hits per other cube
   container.shakeTime = 0;
@@ -304,12 +305,12 @@ function updateCubeLayout(cube) {
   for (const cell of cube.grid) {
     minX = Math.min(minX, cell.x);
     minY = Math.min(minY, cell.y);
-    maxX = Math.max(maxX, cell.x);
-    maxY = Math.max(maxY, cell.y);
+    maxX = Math.max(maxX, cell.x + cell.size);
+    maxY = Math.max(maxY, cell.y + cell.size);
   }
 
-  const width = maxX - minX + BLOCK_SIZE;
-  const height = maxY - minY + BLOCK_SIZE;
+  const width = maxX - minX;
+  const height = maxY - minY;
   const newSize = Math.max(width, height);
 
   let pos = { x: 0, y: 0 },
@@ -329,10 +330,10 @@ function updateCubeLayout(cube) {
   if (cube.withPhysics) {
     const parts = cube.grid.map((cell) => {
       const part = Bodies.rectangle(
-        cell.x + CELL_SIZE / 2,
-        cell.y + CELL_SIZE / 2,
-        BLOCK_SIZE,
-        BLOCK_SIZE
+        cell.x + cell.size / 2,
+        cell.y + cell.size / 2,
+        cell.size,
+        cell.size
       );
 
       part.g = cube;
@@ -357,7 +358,6 @@ function updateCubeLayout(cube) {
   }
 
   cube.size = newSize;
-  cube.massSize = cube.grid.length;
 }
 
 function destroyCube(cube) {
@@ -497,7 +497,8 @@ function collectParticle(cube, p) {
   block.x = pos.x;
   block.y = pos.y;
   cube.addChild(block);
-  cube.grid.push({ block, x: pos.x, y: pos.y });
+  cube.grid.push({ block, x: pos.x, y: pos.y, size: BLOCK_SIZE });
+  cube.massSize += 1;
   updateCubeLayout(cube);
 
   if (cube.deathTimeout) {
@@ -525,7 +526,8 @@ function growCube(cube, count = 1) {
     block.x = pos.x;
     block.y = pos.y;
     cube.addChild(block);
-    cube.grid.push({ block, x: pos.x, y: pos.y });
+    cube.grid.push({ block, x: pos.x, y: pos.y, size: BLOCK_SIZE });
+    cube.massSize += 1;
   }
   updateCubeLayout(cube);
   if (cube.deathTimeout) {
@@ -572,9 +574,8 @@ function createBots(count) {
   const styleNames = Object.keys(STYLES);
   for (let i = 0; i < count; i++) {
     const randStyle = styleNames[Math.floor(Math.random() * styleNames.length)];
-    const bot = createCube(randStyle, BLOCK_SIZE * 2); // start with 4 blocks
+    const bot = createCube(randStyle, BLOCK_SIZE, null, true, 2); // start with 4 blocks
     Body.setPosition(bot.body, { x: (Math.random() - 0.5) * WORLD_SIZE, y: (Math.random() - 0.5) * WORLD_SIZE });
-    bot.massSize = bot.grid.length;
     bot.target = null;
     bots.push(bot);
     world.addChild(bot);
@@ -694,12 +695,12 @@ function collideCubes(c1, c2) {
 
   let bigger = c1;
   let smaller = c2;
-  if (c2.grid.length > c1.grid.length) {
+  if (c2.massSize > c1.massSize) {
     bigger = c2;
     smaller = c1;
   }
 
-  if (bigger.grid.length > smaller.grid.length) {
+  if (bigger.massSize > smaller.massSize) {
     startEating(bigger, smaller);
   } else {
     removeCubeBlocks(c1, 1, pos2);
@@ -777,6 +778,7 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
   for (let i = 0; i < count && cube.grid.length > 0; i++) {
     const idx = Math.floor(Math.random() * cube.grid.length);
     const cell = cube.grid.splice(idx, 1)[0];
+    cube.massSize -= 1;
     cube.removeChild(cell.block);
     if (cube.body) {
       const worldX = cube.body.position.x + cell.x;
@@ -789,8 +791,8 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
       cell.block.alpha = 0.8;
       cell.block.collected = false;
       cell.block.scale.set(1);
-      cell.block.width = BLOCK_SIZE;
-      cell.block.height = BLOCK_SIZE;
+      cell.block.width = cell.size;
+      cell.block.height = cell.size;
       if (cell.block.anchor?.set) cell.block.anchor.set(0);
       if (cell.block.pivot) cell.block.pivot.set(0);
       cell.block.rotation = 0;
@@ -810,16 +812,16 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
       }
 
       const body = Bodies.rectangle(
-        worldX + BLOCK_SIZE / 2,
-        worldY + BLOCK_SIZE / 2,
-        BLOCK_SIZE,
-        BLOCK_SIZE,
+        worldX + cell.size / 2,
+        worldY + cell.size / 2,
+        cell.size,
+        cell.size,
         { isSensor: true, frictionAir: 0.15 }
       );
       cell.block.body = body;
       body.g = cell.block;
       const dir = Vector.normalise(
-        Vector.sub({ x: worldX + BLOCK_SIZE / 2, y: worldY + BLOCK_SIZE / 2 }, fromPos)
+        Vector.sub({ x: worldX + cell.size / 2, y: worldY + cell.size / 2 }, fromPos)
       );
       Body.setVelocity(body, { x: dir.x * 4, y: dir.y * 4 });
 
@@ -827,7 +829,7 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
       foods.push(cell.block);
       world.addChild(cell.block);
 
-      createBlockExplosion({ x: worldX + cube.blockSize / 2, y: worldY + cube.blockSize / 2 });
+      createBlockExplosion({ x: worldX + cell.size / 2, y: worldY + cell.size / 2 });
     }
   }
   cube.hitTime = 12;
@@ -900,7 +902,7 @@ function setupSocket() {
 
 function createRemotePlayer(id) {
   if (remotePlayers[id]) return;
-  const g = createCube('cheese', BLOCK_SIZE * 2, false); // start with 4 blocks
+  const g = createCube('cheese', BLOCK_SIZE, null, false, 2); // start with 4 blocks
   g.x = 0;
   g.y = 0;
   remotePlayers[id] = g;
@@ -923,7 +925,7 @@ function updateLeaderboard() {
     entries.push({
       name: 'You',
       color: player.color,
-      mass: player.grid.length,
+      mass: player.massSize,
       style: player.styleName,
       me: true
     });
@@ -933,7 +935,7 @@ function updateLeaderboard() {
     entries.push({
       name: 'Bot',
       color: bot.color,
-      mass: bot.grid.length,
+      mass: bot.massSize,
       style: bot.styleName
     });
   }
@@ -943,7 +945,7 @@ function updateLeaderboard() {
     entries.push({
       name: id.slice(0, 4),
       color: rp.color,
-      mass: rp.grid.length,
+      mass: rp.massSize,
       style: rp.styleName
     });
   }
