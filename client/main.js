@@ -514,8 +514,11 @@ function handleCollisions(event) {
 
 function collideCubes(c1, c2) {
   if (!c1 || !c2 || !c1.body || !c2.body) return;
-  removeCubeBlocks(c1, 1, c2.body.position);
-  removeCubeBlocks(c2, 1, c1.body.position);
+  // capture positions before any cube might lose its physics body
+  const pos1 = { x: c1.body.position.x, y: c1.body.position.y };
+  const pos2 = { x: c2.body.position.x, y: c2.body.position.y };
+  removeCubeBlocks(c1, 1, pos2);
+  removeCubeBlocks(c2, 1, pos1);
 }
 
 function createFragmentFromCollision(size, pos, from, color) {
