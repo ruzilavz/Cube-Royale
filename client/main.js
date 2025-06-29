@@ -100,13 +100,27 @@ function toggleSnake(cube = player) {
   if (!cube || now - cube.lastSnakeToggle < SNAKE_COOLDOWN) return;
   cube.lastSnakeToggle = now;
   if (!cube.isSnake) {
+    const prevMass = cube.massSize;
     const newSegments = [];
     const bodyCells = cube.grid.filter((c) => c.size === BLOCK_SIZE);
     cube.savedSnakeGrid = bodyCells.map((c) => ({ x: c.x, y: c.y }));
     cube.grid = cube.grid.filter((c) => c.size !== BLOCK_SIZE);
-    cube.massSize -= bodyCells.length;
+    cube.massSize = 1; // mass of the head only
     for (const cell of bodyCells) {
       cube.removeChild(cell.block);
+      const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
+      seg.parentCube = cube;
+      if (cube.body) {
+        Body.setPosition(seg.body, {
+          x: cube.body.position.x - (newSegments.length + 1) * CELL_SIZE,
+          y: cube.body.position.y,
+        });
+      }
+      world.addChild(seg);
+      newSegments.push(seg);
+    }
+    const extra = Math.max(0, prevMass - 1 - bodyCells.length);
+    for (let i = 0; i < extra; i++) {
       const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
       seg.parentCube = cube;
       if (cube.body) {
@@ -866,7 +880,7 @@ function collideCubes(c1, c2) {
     smaller = c1;
   }
 
-  if (smaller === player && player.isSnake && player.snakeSegments.length > 0) {
+  if (smaller.isSnake && smaller.snakeSegments.length > 0) {
     // head cannot be eaten until segments are gone
   } else if (getTotalMass(bigger) > getTotalMass(smaller) && isCubeEngulfed(bigger, smaller)) {
     startEating(bigger, smaller);
