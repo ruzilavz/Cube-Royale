@@ -655,10 +655,10 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
       }
 
       const body = Bodies.rectangle(
-        worldX + cube.blockSize / 2,
-        worldY + cube.blockSize / 2,
-        cube.blockSize,
-        cube.blockSize,
+        worldX + BLOCK_SIZE / 2,
+        worldY + BLOCK_SIZE / 2,
+        BLOCK_SIZE,
+        BLOCK_SIZE,
         { isSensor: true, frictionAir: 0.15 }
       );
       cell.block.body = body;
