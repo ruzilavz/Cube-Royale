@@ -374,9 +374,7 @@ function gameLoop(delta, targetX, targetY) {
 
   for (const f of foods) {
     if (f.isFragment) {
-      const t = app.ticker.lastTime / 1000;
-      const scale = 1 + 0.1 * Math.sin(t + f.pulseOffset);
-      f.scale.set(scale, scale);
+      f.scale.set(1, 1);
       f.rotation += f.rotationSpeed * delta;
     }
   }
@@ -421,6 +419,10 @@ function collectParticle(cube, p) {
     block = p;
     block.rotation = 0;
     block.alpha = 1;
+    block.width = BLOCK_SIZE;
+    block.height = BLOCK_SIZE;
+    block.scale.set(1);
+    if (block.pivot) block.pivot.set(0);
   } else {
     block = new PIXI.Sprite(PIXI.Texture.from(STYLES[cube.styleName].path));
     block.width = BLOCK_SIZE;
@@ -563,7 +565,8 @@ function collideCubes(c1, c2) {
   removeCubeBlocks(c2, 1, pos1);
 }
 
-function createFragmentFromCollision(size, pos, from, color) {
+function createFragmentFromCollision(pos, from, color) {
+  const size = BLOCK_SIZE;
   const frag = new PIXI.Graphics();
   drawVoxel(frag, color);
   frag.x = pos.x;
@@ -633,6 +636,10 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
       cell.block.isFood = true;
       cell.block.isFragment = true;
       cell.block.alpha = 0.8;
+      cell.block.width = cube.blockSize;
+      cell.block.height = cube.blockSize;
+      cell.block.scale.set(1);
+      if (cell.block.pivot) cell.block.pivot.set(0);
       cell.block.pickupCooldown = Date.now() + 500;
       cell.block.rotationSpeed = (Math.random() - 0.5) * 0.1;
       cell.block.pulseOffset = Math.random() * Math.PI * 2;
