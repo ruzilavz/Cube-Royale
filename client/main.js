@@ -79,6 +79,7 @@ let selectedStyle = 'cheese';
 let isSnake = false;
 let snakeSegments = [];
 let lastSnakeToggle = 0;
+let savedSnakeGrid = [];
 
 function lighten(color, amount) {
   const rgb = PIXI.utils.hex2rgb(color);
@@ -97,6 +98,7 @@ function toggleSnake() {
   if (!isSnake) {
     const newSegments = [];
     const bodyCells = player.grid.filter((c) => c.size === BLOCK_SIZE);
+    savedSnakeGrid = bodyCells.map((c) => ({ x: c.x, y: c.y }));
     player.grid = player.grid.filter((c) => c.size !== BLOCK_SIZE);
     player.massSize -= bodyCells.length;
     for (const cell of bodyCells) {
@@ -113,22 +115,37 @@ function toggleSnake() {
     updateCubeLayout(player);
     isSnake = true;
   } else {
+    const segCount = snakeSegments.length;
     for (const seg of snakeSegments) {
-      if (seg.body) {
-        const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[player.styleName].path));
-        block.width = BLOCK_SIZE;
-        block.height = BLOCK_SIZE;
-        const pos = { x: seg.body.position.x - player.body.position.x, y: seg.body.position.y - player.body.position.y };
-        player.addChild(block);
-        player.grid.push({ block, x: pos.x, y: pos.y, size: BLOCK_SIZE });
-      }
       destroyCube(seg);
     }
-    player.massSize += snakeSegments.length;
     snakeSegments = [];
+    for (let i = 0; i < segCount; i++) {
+      const pos = savedSnakeGrid[i] || getRandomGrowthPosition(player);
+      const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[player.styleName].path));
+      block.width = BLOCK_SIZE;
+      block.height = BLOCK_SIZE;
+      block.x = pos.x;
+      block.y = pos.y;
+      player.addChild(block);
+      player.grid.push({ block, x: pos.x, y: pos.y, size: BLOCK_SIZE });
+      player.massSize += 1;
+    }
+    savedSnakeGrid = [];
     updateCubeLayout(player);
     isSnake = false;
   }
+}
+
+function addSnakeSegment() {
+  const seg = createCube(player.styleName, BLOCK_SIZE, 1, true, 1);
+  let base = player.body.position;
+  if (snakeSegments.length > 0 && snakeSegments[snakeSegments.length - 1].body) {
+    base = snakeSegments[snakeSegments.length - 1].body.position;
+  }
+  Body.setPosition(seg.body, { x: base.x, y: base.y });
+  world.addChild(seg);
+  snakeSegments.push(seg);
 }
 
 function getMoveSpeed(cube = player) {
@@ -540,6 +557,10 @@ function collectParticle(cube, p) {
   p.collected = true;
 
   removeParticle(p);
+  if (isSnake && (cube === player || snakeSegments.includes(cube))) {
+    addSnakeSegment();
+    return;
+  }
   const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[cube.styleName].path));
   if (block.texture?.baseTexture) {
     const tex = block.texture.baseTexture;
@@ -570,6 +591,10 @@ function collectParticle(cube, p) {
 
 function growCube(cube, count = 1) {
   for (let i = 0; i < count; i++) {
+    if (isSnake && (cube === player || snakeSegments.includes(cube))) {
+      addSnakeSegment();
+      continue;
+    }
     const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[cube.styleName].path));
     if (block.texture?.baseTexture) {
       const tex = block.texture.baseTexture;
