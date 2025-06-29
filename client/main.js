@@ -374,7 +374,6 @@ function gameLoop(delta, targetX, targetY) {
 
   for (const f of foods) {
     if (f.isFragment) {
-      f.scale.set(1, 1);
       f.rotation += f.rotationSpeed * delta;
     }
   }
@@ -419,9 +418,9 @@ function collectParticle(cube, p) {
     block = p;
     block.rotation = 0;
     block.alpha = 1;
+    block.scale.set(1);
     block.width = BLOCK_SIZE;
     block.height = BLOCK_SIZE;
-    block.scale.set(1);
     if (block.pivot) block.pivot.set(0);
   } else {
     block = new PIXI.Sprite(PIXI.Texture.from(STYLES[cube.styleName].path));
@@ -636,9 +635,9 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
       cell.block.isFood = true;
       cell.block.isFragment = true;
       cell.block.alpha = 0.8;
+      cell.block.scale.set(1);
       cell.block.width = BLOCK_SIZE;
       cell.block.height = BLOCK_SIZE;
-      cell.block.scale.set(1);
       if (cell.block.anchor?.set) cell.block.anchor.set(0);
       if (cell.block.pivot) cell.block.pivot.set(0);
       cell.block.rotation = 0;
