@@ -1,6 +1,9 @@
 const menu = document.getElementById('menu');
 const pveBtn = document.getElementById('pveBtn');
 const pvpBtn = document.getElementById('pvpBtn');
+const styleBtn = document.getElementById('styleBtn');
+const closeStyleBtn = document.getElementById('closeStyleBtn');
+const styleModal = document.getElementById('styleModal');
 const styleOptions = document.querySelectorAll('.style-option');
 styleOptions.forEach((opt) => {
   opt.addEventListener('click', () => {
@@ -10,6 +13,14 @@ styleOptions.forEach((opt) => {
   });
 });
 if (styleOptions[0]) styleOptions[0].classList.add('selected');
+
+styleBtn.addEventListener('click', () => {
+  styleModal.style.display = 'flex';
+});
+
+closeStyleBtn.addEventListener('click', () => {
+  styleModal.style.display = 'none';
+});
 
 let mode = null; // 'pve' or 'pvp'
 let socket;
@@ -42,7 +53,14 @@ const STYLES = {
   meat: { path: 'assets/styles/meat.png', color: 0xff9999 },
   orange: { path: 'assets/styles/orange.png', color: 0xffaa33 },
   grass: { path: 'assets/styles/grass.png', color: 0x77cc55 },
-  salmon: { path: 'assets/styles/salmon.png', color: 0xff8888 }
+  salmon: { path: 'assets/styles/salmon.png', color: 0xff8888 },
+  tree: { path: 'assets/styles/tree.png', color: 0x228833 },
+  marble: { path: 'assets/styles/marble.png', color: 0xcccccc },
+  pepsi: { path: 'assets/styles/pepsi.png', color: 0x0033cc },
+  egg: { path: 'assets/styles/egg.png', color: 0xffffaa },
+  sparklingWater: { path: 'assets/styles/sparkling.water.png', color: 0x99ddee },
+  mechanical: { path: 'assets/styles/mechanical.png', color: 0x777777 },
+  worm: { path: 'assets/styles/worm.png', color: 0xcc6622 }
 };
 
 let selectedStyle = 'cheese';
