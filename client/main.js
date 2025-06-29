@@ -44,7 +44,7 @@ const WORLD_SIZE = 5000;
 const FOOD_COUNT = 250;
 const MAX_PLAYER_SIZE = 250;
 const BLOCK_SIZE = 35;
-const SPACING = 2;
+const SPACING = 0;
 const CELL_SIZE = BLOCK_SIZE + SPACING;
 const FOOD_SIZE = 25;
 let cubeIdCounter = 0;
@@ -574,7 +574,7 @@ function createBots(count) {
   const styleNames = Object.keys(STYLES);
   for (let i = 0; i < count; i++) {
     const randStyle = styleNames[Math.floor(Math.random() * styleNames.length)];
-    const bot = createCube(randStyle, BLOCK_SIZE, null, true, 2); // start with 4 blocks
+    const bot = createCube(randStyle, BIG_CUBE_SIZE, BIG_CUBE_MASS, true, 1); // big central cube
     Body.setPosition(bot.body, { x: (Math.random() - 0.5) * WORLD_SIZE, y: (Math.random() - 0.5) * WORLD_SIZE });
     bot.target = null;
     bots.push(bot);
@@ -776,7 +776,10 @@ function createDeathCloud(pos) {
 
 function removeCubeBlocks(cube, count = 1, fromPos) {
   for (let i = 0; i < count && cube.grid.length > 0; i++) {
-    const idx = Math.floor(Math.random() * cube.grid.length);
+    let idx = cube.grid.findIndex((c) => c.size === BLOCK_SIZE);
+    if (idx === -1) {
+      idx = 0;
+    }
     const cell = cube.grid.splice(idx, 1)[0];
     cube.massSize -= 1;
     cube.removeChild(cell.block);
@@ -855,6 +858,14 @@ function syncGraphics() {
       c.x = c.body.position.x + (shake ? (Math.random() - 0.5) * shake : 0);
       c.y = c.body.position.y + (shake ? (Math.random() - 0.5) * shake : 0);
     }
+    for (const cell of c.grid) {
+      if (cell.size === BLOCK_SIZE) {
+        if (!cell.offsetSeed) cell.offsetSeed = Math.random() * Math.PI * 2;
+        const sway = Math.sin(globalTime * 0.1 + cell.offsetSeed) * 1.5;
+        cell.block.x = cell.x + SPACING / 2 + sway;
+        cell.block.y = cell.y + SPACING / 2 + Math.cos(globalTime * 0.1 + cell.offsetSeed) * 1.5;
+      }
+    }
     if (c.hitTime > 0) {
       c.hitTime -= 1;
       c.tint = 0xffaaaa;
@@ -902,7 +913,7 @@ function setupSocket() {
 
 function createRemotePlayer(id) {
   if (remotePlayers[id]) return;
-  const g = createCube('cheese', BLOCK_SIZE, null, false, 2); // start with 4 blocks
+  const g = createCube('cheese', BIG_CUBE_SIZE, null, false, 1); // big central cube
   g.x = 0;
   g.y = 0;
   remotePlayers[id] = g;
