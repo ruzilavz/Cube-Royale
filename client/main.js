@@ -35,7 +35,6 @@ const MAX_PLAYER_SIZE = 250;
 const BLOCK_SIZE = 35;
 let cubeIdCounter = 0;
 const HIT_COOLDOWN = 500; // ms between damage from the same cube
-const TELEPORT_RADIUS = 250; // max distance for cube jump
 
 const STYLES = {
   cheese: { path: 'assets/styles/cheese.png', color: 0xffe066 },
@@ -198,30 +197,6 @@ function initGame() {
   window.addEventListener('mousemove', mouseMoveHandler);
   window.addEventListener('touchmove', touchMoveHandler);
 
-  const teleportHandler = (x, y) => {
-    if (!player || player.isTeleporting) return;
-    const worldX = x - app.screen.width / 2 + player.body.position.x;
-    const worldY = y - app.screen.height / 2 + player.body.position.y;
-    const dx = worldX - player.body.position.x;
-    const dy = worldY - player.body.position.y;
-    const dist = Vector.magnitude({ x: dx, y: dy });
-    let tx = worldX;
-    let ty = worldY;
-    if (dist > TELEPORT_RADIUS) {
-      const dir = Vector.normalise({ x: dx, y: dy });
-      tx = player.body.position.x + dir.x * TELEPORT_RADIUS;
-      ty = player.body.position.y + dir.y * TELEPORT_RADIUS;
-    }
-    teleportCube(player, { x: tx, y: ty });
-  };
-
-  app.view.addEventListener('mousedown', (e) => {
-    if (e.button === 0) teleportHandler(e.clientX, e.clientY);
-  });
-  app.view.addEventListener('touchstart', (e) => {
-    const t = e.touches[0];
-    teleportHandler(t.clientX, t.clientY);
-  });
 
   app.ticker.add((delta) => gameLoop(delta, targetX, targetY));
   setInterval(updateLeaderboard, 500);
@@ -398,14 +373,12 @@ function spawnFood() {
 function gameLoop(delta, targetX, targetY) {
   if (!player || !player.body) return;
   // движение игрока
-  if (!player.isTeleporting) {
-    const dx = targetX;
-    const dy = targetY;
-    const len = Vector.magnitude({ x: dx, y: dy });
-    if (len > 0) {
-      const speed = 2;
-      Body.translate(player.body, { x: (dx / len) * speed * delta, y: (dy / len) * speed * delta });
-    }
+  const dx = targetX;
+  const dy = targetY;
+  const len = Vector.magnitude({ x: dx, y: dy });
+  if (len > 0) {
+    const speed = 2;
+    Body.translate(player.body, { x: (dx / len) * speed * delta, y: (dy / len) * speed * delta });
   }
   Engine.update(engine, delta * 16);
 
@@ -477,94 +450,6 @@ function collectParticle(cube, p) {
   }
 }
 
-function easeInOutSine(t) {
-  return -(Math.cos(Math.PI * t) - 1) / 2;
-}
-
-function easeOutBack(t) {
-  const c1 = 1.70158;
-  const c3 = c1 + 1;
-  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-}
-
-function teleportCube(cube, dest) {
-  if (!cube || cube.isTeleporting) return;
-
-  const start = { x: cube.body.position.x, y: cube.body.position.y };
-  cube.isTeleporting = true;
-
-  MWorld.remove(engine.world, cube.body);
-  cube.visible = false;
-
-  const infos = [];
-  for (const cell of cube.grid) {
-    world.addChild(cell.block);
-    const startPos = { x: start.x + cell.x, y: start.y + cell.y };
-    cell.block.x = startPos.x;
-    cell.block.y = startPos.y;
-    const scatter = {
-      x: (Math.random() - 0.5) * 60,
-      y: (Math.random() - 0.5) * 60,
-    };
-    const scatterPos = { x: startPos.x + scatter.x, y: startPos.y + scatter.y };
-    infos.push({
-      cell,
-      startPos,
-      scatterPos,
-      finalPos: { x: dest.x + cell.x, y: dest.y + cell.y },
-      delay: Math.random() * 3,
-      rot: (Math.random() - 0.5) * 0.2,
-      pulse: Math.random() * Math.PI * 2,
-    });
-    createBlockExplosion(startPos);
-  }
-
-  let t = 0;
-  const scatterDuration = 10;
-  const gatherDuration = 25;
-
-  const update = (delta) => {
-    t += delta;
-    let allDone = true;
-    for (const info of infos) {
-      const b = info.cell.block;
-      b.rotation += info.rot * delta;
-      b.scale.set(1 + 0.05 * Math.sin((t + info.pulse) * 0.5));
-
-      if (t <= scatterDuration) {
-        const p = easeOutBack(Math.min(1, t / scatterDuration));
-        b.x = info.startPos.x + (info.scatterPos.x - info.startPos.x) * p;
-        b.y = info.startPos.y + (info.scatterPos.y - info.startPos.y) * p;
-        allDone = false;
-      } else {
-        const dt = t - scatterDuration - info.delay;
-        const p = Math.min(1, Math.max(0, dt / gatherDuration));
-        const e = easeInOutSine(p);
-        b.x = info.scatterPos.x + (info.finalPos.x - info.scatterPos.x) * e;
-        b.y = info.scatterPos.y + (info.finalPos.y - info.scatterPos.y) * e;
-        if (p < 1) allDone = false;
-      }
-    }
-
-    if (allDone) {
-      app.ticker.remove(update);
-      for (const info of infos) {
-        cube.addChild(info.cell.block);
-        info.cell.block.x = info.cell.x;
-        info.cell.block.y = info.cell.y;
-        info.cell.block.rotation = 0;
-        info.cell.block.scale.set(1);
-      }
-      Body.setPosition(cube.body, dest);
-      Body.setVelocity(cube.body, { x: 0, y: 0 });
-      MWorld.add(engine.world, cube.body);
-      cube.visible = true;
-      cube.isTeleporting = false;
-    }
-  };
-
-  app.ticker.add(update);
-}
 
 function createBots(count) {
   const styleNames = Object.keys(STYLES);
