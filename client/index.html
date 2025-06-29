@@ -8,16 +8,30 @@
 </head>
 <body>
   <div id="menu">
-    <div id="styleSelector">
-      <img src="assets/styles/cheese.png" class="style-option" data-style="cheese" />
-      <img src="assets/styles/watermelon.png" class="style-option" data-style="watermelon" />
-      <img src="assets/styles/meat.png" class="style-option" data-style="meat" />
-      <img src="assets/styles/orange.png" class="style-option" data-style="orange" />
-      <img src="assets/styles/grass.png" class="style-option" data-style="grass" />
-      <img src="assets/styles/salmon.png" class="style-option" data-style="salmon" />
-    </div>
+    <button id="styleBtn">Стили</button>
     <button id="pveBtn">PvE</button>
     <button id="pvpBtn">PvP</button>
+  </div>
+
+  <div id="styleModal" class="modal">
+    <div class="modal-content">
+      <div id="styleSelector">
+        <img src="assets/styles/cheese.png" class="style-option" data-style="cheese" />
+        <img src="assets/styles/watermelon.png" class="style-option" data-style="watermelon" />
+        <img src="assets/styles/meat.png" class="style-option" data-style="meat" />
+        <img src="assets/styles/orange.png" class="style-option" data-style="orange" />
+        <img src="assets/styles/grass.png" class="style-option" data-style="grass" />
+        <img src="assets/styles/salmon.png" class="style-option" data-style="salmon" />
+        <img src="assets/styles/tree.png" class="style-option" data-style="tree" />
+        <img src="assets/styles/marble.png" class="style-option" data-style="marble" />
+        <img src="assets/styles/pepsi.png" class="style-option" data-style="pepsi" />
+        <img src="assets/styles/egg.png" class="style-option" data-style="egg" />
+        <img src="assets/styles/sparkling.water.png" class="style-option" data-style="sparklingWater" />
+        <img src="assets/styles/mechanical.png" class="style-option" data-style="mechanical" />
+        <img src="assets/styles/worm.png" class="style-option" data-style="worm" />
+      </div>
+      <button id="closeStyleBtn">Закрыть</button>
+    </div>
   </div>
   <!-- Локальная копия PixiJS, чтобы игра запускалась без доступа к CDN -->
   <script src="pixi.min.js"></script>
