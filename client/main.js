@@ -22,6 +22,7 @@ const WORLD_SIZE = 5000;
 const FOOD_COUNT = 250;
 const MAX_PLAYER_SIZE = 250;
 const BLOCK_SIZE = 10;
+let cubeIdCounter = 0;
 
 function lighten(color, amount) {
   const rgb = PIXI.utils.hex2rgb(color);
@@ -177,9 +178,11 @@ function initGame() {
 
 function createCube(color, size, withPhysics = true) {
   const container = new PIXI.Container();
+  container.cid = cubeIdCounter++;
   container.size = size;
   container.color = color;
   container.isCube = true;
+  container.withPhysics = withPhysics;
   container.grid = [];
   const count = Math.round(size / BLOCK_SIZE);
   for (let i = 0; i < count; i++) {
@@ -199,10 +202,6 @@ function createCube(color, size, withPhysics = true) {
   container.hitTime = 0;
   container.shakeTime = 0;
   if (withPhysics) {
-    const body = Bodies.rectangle(0, 0, size, size, { frictionAir: 0.2 });
-    container.body = body;
-    body.g = container;
-    MWorld.add(engine.world, body);
     cubes.push(container);
   }
   updateCubeLayout(container);
@@ -210,6 +209,24 @@ function createCube(color, size, withPhysics = true) {
 }
 
 function updateCubeLayout(cube) {
+  if (cube.grid.length === 0) return;
+
+  let sumX = 0,
+    sumY = 0;
+  for (const cell of cube.grid) {
+    sumX += cell.x + cube.blockSize / 2;
+    sumY += cell.y + cube.blockSize / 2;
+  }
+  const cx = sumX / cube.grid.length;
+  const cy = sumY / cube.grid.length;
+
+  for (const cell of cube.grid) {
+    cell.x -= cx;
+    cell.y -= cy;
+    cell.block.x = cell.x;
+    cell.block.y = cell.y;
+  }
+
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,
@@ -219,28 +236,49 @@ function updateCubeLayout(cube) {
     minY = Math.min(minY, cell.y);
     maxX = Math.max(maxX, cell.x);
     maxY = Math.max(maxY, cell.y);
-    cell.block.x = cell.x;
-    cell.block.y = cell.y;
   }
-  if (cube.grid.length === 0) return;
+
   const width = maxX - minX + BLOCK_SIZE;
   const height = maxY - minY + BLOCK_SIZE;
   const newSize = Math.max(width, height);
+
+  let pos = { x: 0, y: 0 },
+    vel = { x: 0, y: 0 },
+    angle = 0,
+    angVel = 0;
+
   if (cube.body) {
     const old = cube.body;
-    const pos = { x: old.position.x, y: old.position.y };
-    const vel = { x: old.velocity.x, y: old.velocity.y };
-    const angle = old.angle;
-    const angVel = old.angularVelocity;
+    pos = { x: old.position.x, y: old.position.y };
+    vel = { x: old.velocity.x, y: old.velocity.y };
+    angle = old.angle;
+    angVel = old.angularVelocity;
     MWorld.remove(engine.world, old);
-    const body = Bodies.rectangle(pos.x, pos.y, width, height, { frictionAir: 0.2 });
+  }
+
+  if (cube.withPhysics) {
+    const parts = cube.grid.map((cell) => {
+      const part = Bodies.rectangle(
+        cell.x + cube.blockSize / 2,
+        cell.y + cube.blockSize / 2,
+        cube.blockSize,
+        cube.blockSize
+      );
+      part.g = cube;
+      return part;
+    });
+    const body = Body.create({ parts, frictionAir: 0.2 });
+    Body.setPosition(body, { x: pos.x + cx, y: pos.y + cy });
     Body.setVelocity(body, vel);
     Body.setAngle(body, angle);
     Body.setAngularVelocity(body, angVel);
     body.g = cube;
     cube.body = body;
     MWorld.add(engine.world, body);
+  } else {
+    cube.body = null;
   }
+
   cube.size = newSize;
   cube.massSize = cube.grid.length;
 }
@@ -283,7 +321,7 @@ function gameLoop(delta, targetX, targetY) {
   // движение игрока
   const dx = targetX;
   const dy = targetY;
-  const len = Math.sqrt(dx * dx + dy * dy);
+  const len = Vector.magnitude({ x: dx, y: dy });
   if (len > 0) {
     const speed = 2;
     Body.translate(player.body, { x: (dx / len) * speed * delta, y: (dy / len) * speed * delta });
@@ -421,12 +459,17 @@ function updateBots(delta) {
 }
 
 function handleCollisions(event) {
+  const processed = new Set();
   for (const pair of event.pairs) {
     const a = pair.bodyA.g;
     const b = pair.bodyB.g;
     if (!a || !b) continue;
-    if (a.isCube && b.isCube) {
-      collideCubes(a, b);
+    if (a.isCube && b.isCube && a !== b) {
+      const key = a.cid < b.cid ? `${a.cid}-${b.cid}` : `${b.cid}-${a.cid}`;
+      if (!processed.has(key)) {
+        collideCubes(a, b);
+        processed.add(key);
+      }
     } else if (a.isCube && b.isFood) {
       collectParticle(a, b);
     } else if (b.isCube && a.isFood) {
@@ -436,11 +479,8 @@ function handleCollisions(event) {
 }
 
 function collideCubes(c1, c2) {
-  if (c1.massSize === c2.massSize) return;
-  let smaller = c1.massSize < c2.massSize ? c1 : c2;
-  let larger = c1.massSize < c2.massSize ? c2 : c1;
-  const removeCount = Math.min(3, smaller.grid.length);
-  removeCubeBlocks(smaller, removeCount, larger.body.position);
+  removeCubeBlocks(c1, 1, c2.body.position);
+  removeCubeBlocks(c2, 1, c1.body.position);
 }
 
 function createFragmentFromCollision(size, pos, from, color) {
@@ -498,7 +538,7 @@ function createDeathCloud(pos) {
   effects.push(e);
 }
 
-function removeCubeBlocks(cube, count, fromPos) {
+function removeCubeBlocks(cube, count = 1, fromPos) {
   for (let i = 0; i < count && cube.grid.length > 0; i++) {
     const idx = Math.floor(Math.random() * cube.grid.length);
     const cell = cube.grid.splice(idx, 1)[0];
