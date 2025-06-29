@@ -806,26 +806,59 @@ function removeRemotePlayer(id) {
 function updateLeaderboard() {
   if (!leaderboardContainer) return;
   leaderboardContainer.removeChildren();
+
   const entries = [];
   if (player) {
-    entries.push({ name: 'You', color: player.color, mass: player.grid.length });
+    entries.push({
+      name: 'You',
+      color: player.color,
+      mass: player.grid.length,
+      style: player.styleName,
+      me: true
+    });
   }
+
   for (const bot of bots) {
-    entries.push({ name: 'Bot', color: bot.color, mass: bot.grid.length });
+    entries.push({
+      name: 'Bot',
+      color: bot.color,
+      mass: bot.grid.length,
+      style: bot.styleName
+    });
   }
+
   for (const id in remotePlayers) {
     const rp = remotePlayers[id];
-    entries.push({ name: id.slice(0, 4), color: rp.color, mass: rp.grid.length });
+    entries.push({
+      name: id.slice(0, 4),
+      color: rp.color,
+      mass: rp.grid.length,
+      style: rp.styleName
+    });
   }
+
   entries.sort((a, b) => b.mass - a.mass);
   const top = entries.slice(0, 10);
+
   top.forEach((e, i) => {
-    const text = new PIXI.Text(`${i + 1}. ${e.mass}`, {
-      fill: e.color,
+    const row = new PIXI.Container();
+
+    const sprite = new PIXI.Sprite(PIXI.Texture.from(STYLES[e.style].path));
+    sprite.width = 14;
+    sprite.height = 14;
+    row.addChild(sprite);
+
+    const style = new PIXI.TextStyle({
+      fill: e.me ? 0xffff00 : e.color,
       fontSize: 14,
+      fontWeight: e.me ? 'bold' : 'normal'
     });
-    text.y = i * 16;
-    leaderboardContainer.addChild(text);
+    const text = new PIXI.Text(`${i + 1}. ${e.mass}`, style);
+    text.x = 18;
+    row.addChild(text);
+
+    row.y = i * 18;
+    leaderboardContainer.addChild(row);
   });
 }
 
