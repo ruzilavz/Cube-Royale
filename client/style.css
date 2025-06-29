@@ -22,3 +22,22 @@ canvas {
   font-size: 1.2em;
   padding: 10px 20px;
 }
+
+#styleSelector {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.style-option {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+.style-option.selected {
+  border-color: #fff;
+}
