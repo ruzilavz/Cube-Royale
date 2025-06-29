@@ -298,10 +298,10 @@ function updateCubeLayout(cube) {
   if (cube.withPhysics) {
     const parts = cube.grid.map((cell) => {
       const part = Bodies.rectangle(
-        cell.x + cube.blockSize / 2,
-        cell.y + cube.blockSize / 2,
-        cube.blockSize,
-        cube.blockSize
+        cell.x + BLOCK_SIZE / 2,
+        cell.y + BLOCK_SIZE / 2,
+        BLOCK_SIZE,
+        BLOCK_SIZE
       );
       part.g = cube;
       return part;
@@ -636,10 +636,13 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
       cell.block.isFood = true;
       cell.block.isFragment = true;
       cell.block.alpha = 0.8;
-      cell.block.width = cube.blockSize;
-      cell.block.height = cube.blockSize;
+      cell.block.width = BLOCK_SIZE;
+      cell.block.height = BLOCK_SIZE;
       cell.block.scale.set(1);
+      if (cell.block.anchor?.set) cell.block.anchor.set(0);
       if (cell.block.pivot) cell.block.pivot.set(0);
+      cell.block.rotation = 0;
+      cell.block.alpha = 1;
       cell.block.pickupCooldown = Date.now() + 500;
       cell.block.rotationSpeed = (Math.random() - 0.5) * 0.1;
       cell.block.pulseOffset = Math.random() * Math.PI * 2;
