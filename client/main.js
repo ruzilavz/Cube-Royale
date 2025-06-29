@@ -293,8 +293,8 @@ function updateCubeLayout(cube) {
   for (const cell of cube.grid) {
     cell.x -= cx;
     cell.y -= cy;
-    cell.block.x = cell.x;
-    cell.block.y = cell.y;
+    cell.block.x = cell.x + SPACING / 2;
+    cell.block.y = cell.y + SPACING / 2;
   }
 
   let minX = Infinity,
@@ -329,11 +329,12 @@ function updateCubeLayout(cube) {
   if (cube.withPhysics) {
     const parts = cube.grid.map((cell) => {
       const part = Bodies.rectangle(
-        cell.x + BLOCK_SIZE / 2,
-        cell.y + BLOCK_SIZE / 2,
+        cell.x + CELL_SIZE / 2,
+        cell.y + CELL_SIZE / 2,
         BLOCK_SIZE,
         BLOCK_SIZE
       );
+
       part.g = cube;
       return part;
     });
