@@ -337,6 +337,8 @@ function updateCubeLayout(cube) {
       );
 
       part.g = cube;
+      part.cell = cell; // link body part to its grid cell
+      cell.part = part;
       return part;
     });
   const body = Body.create({
@@ -690,6 +692,19 @@ function handleCollisions(event) {
   }
 }
 
+function isCubeEngulfed(bigger, smaller) {
+  if (!bigger.body || !smaller.body) return false;
+  for (let i = 1; i < smaller.body.parts.length; i++) {
+    const part = smaller.body.parts[i];
+    for (const v of part.vertices) {
+      if (!Matter.Vertices.contains(bigger.body.vertices, v)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 function collideCubes(c1, c2) {
   if (!c1 || !c2 || !c1.body || !c2.body) return;
   const now = Date.now();
@@ -711,7 +726,7 @@ function collideCubes(c1, c2) {
     smaller = c1;
   }
 
-  if (bigger.massSize > smaller.massSize) {
+  if (bigger.massSize > smaller.massSize && isCubeEngulfed(bigger, smaller)) {
     startEating(bigger, smaller);
   } else {
     removeCubeBlocks(c1, 1, pos2);
