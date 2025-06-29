@@ -308,7 +308,13 @@ function updateCubeLayout(cube) {
       part.g = cube;
       return part;
     });
-    const body = Body.create({ parts, frictionAir: 0.2 });
+  const body = Body.create({
+    parts,
+    frictionAir: 0.2,
+    friction: 0,
+    frictionStatic: 0,
+    restitution: 0.05,
+  });
     Body.setPosition(body, { x: pos.x + cx, y: pos.y + cy });
     Body.setVelocity(body, vel);
     Body.setAngle(body, angle);
@@ -352,6 +358,7 @@ function spawnFood() {
   food.x = (Math.random() - 0.5) * WORLD_SIZE;
   food.y = (Math.random() - 0.5) * WORLD_SIZE;
   food.isFood = true;
+  food.collected = false;
   food.massSize = size;
   const body = Bodies.circle(food.x, food.y, size, { isSensor: true });
   food.body = body;
@@ -404,16 +411,21 @@ function gameLoop(delta, targetX, targetY) {
 }
 
 function removeParticle(p) {
+  if (!p.body) return;
   MWorld.remove(engine.world, p.body);
+  p.body = null;
   world.removeChild(p);
   const idx = foods.indexOf(p);
   if (idx !== -1) foods.splice(idx, 1);
 }
 
 function collectParticle(cube, p) {
+  if (p.collected) return;
   if (p.pickupCooldown && Date.now() < p.pickupCooldown) return;
   if (p.enemyCooldown && p.ownerId && p.ownerId !== cube.cid && Date.now() < p.enemyCooldown) return;
   if (!cube.body && cube.grid.length === 0) return;
+
+  p.collected = true;
 
   removeParticle(p);
   const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[cube.styleName].path));
@@ -563,6 +575,12 @@ function collideCubes(c1, c2) {
   const pos2 = { x: c2.body.position.x, y: c2.body.position.y };
   removeCubeBlocks(c1, 1, pos2);
   removeCubeBlocks(c2, 1, pos1);
+
+  const dir = Vector.normalise(Vector.sub(pos2, pos1));
+  if (dir.x || dir.y) {
+    Body.translate(c1.body, { x: -dir.x * BLOCK_SIZE * 0.25, y: -dir.y * BLOCK_SIZE * 0.25 });
+    Body.translate(c2.body, { x: dir.x * BLOCK_SIZE * 0.25, y: dir.y * BLOCK_SIZE * 0.25 });
+  }
 }
 
 function createFragmentFromCollision(pos, from, color) {
@@ -574,6 +592,7 @@ function createFragmentFromCollision(pos, from, color) {
   frag.isFood = true;
   frag.isFragment = true;
   frag.alpha = 0.8;
+  frag.collected = false;
   frag.pickupCooldown = Date.now() + 500;
   frag.rotationSpeed = (Math.random() - 0.5) * 0.1;
   frag.pulseOffset = Math.random() * Math.PI * 2;
@@ -636,6 +655,7 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
       cell.block.isFood = true;
       cell.block.isFragment = true;
       cell.block.alpha = 0.8;
+      cell.block.collected = false;
       cell.block.scale.set(1);
       cell.block.width = BLOCK_SIZE;
       cell.block.height = BLOCK_SIZE;
