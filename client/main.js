@@ -410,27 +410,17 @@ function removeParticle(p) {
 
 function collectParticle(cube, p) {
   if (p.pickupCooldown && Date.now() < p.pickupCooldown) return;
+  if (p.enemyCooldown && p.ownerId && p.ownerId !== cube.cid && Date.now() < p.enemyCooldown) return;
   if (!cube.body && cube.grid.length === 0) return;
 
   removeParticle(p);
-  let block;
-  if (p.isFragment && p.texture) {
-    block = p;
-    block.rotation = 0;
-    block.alpha = 1;
-    block.scale.set(1);
-    block.width = BLOCK_SIZE;
-    block.height = BLOCK_SIZE;
-    if (block.pivot) block.pivot.set(0);
-  } else {
-    block = new PIXI.Sprite(PIXI.Texture.from(STYLES[cube.styleName].path));
-    block.width = BLOCK_SIZE;
-    block.height = BLOCK_SIZE;
-    if (PIXI.filters && PIXI.filters.DropShadowFilter) {
-      block.filters = [
-        new PIXI.filters.DropShadowFilter({ distance: 1, blur: 2, alpha: 0.6 })
-      ];
-    }
+  const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[cube.styleName].path));
+  block.width = BLOCK_SIZE;
+  block.height = BLOCK_SIZE;
+  if (PIXI.filters && PIXI.filters.DropShadowFilter) {
+    block.filters = [
+      new PIXI.filters.DropShadowFilter({ distance: 1, blur: 2, alpha: 0.6 })
+    ];
   }
   const pos = getRandomGrowthPosition(cube);
   block.x = pos.x;
@@ -642,7 +632,10 @@ function removeCubeBlocks(cube, count = 1, fromPos) {
       if (cell.block.pivot) cell.block.pivot.set(0);
       cell.block.rotation = 0;
       cell.block.alpha = 1;
-      cell.block.pickupCooldown = Date.now() + 500;
+      cell.block.ownerId = cube.cid;
+      cell.block.styleName = cube.styleName;
+      cell.block.pickupCooldown = Date.now() + 1000;
+      cell.block.enemyCooldown = Date.now() + 3000;
       cell.block.rotationSpeed = (Math.random() - 0.5) * 0.1;
       cell.block.pulseOffset = Math.random() * Math.PI * 2;
       if (PIXI.filters && PIXI.filters.DropShadowFilter) {
