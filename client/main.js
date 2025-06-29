@@ -1,6 +1,15 @@
 const menu = document.getElementById('menu');
 const pveBtn = document.getElementById('pveBtn');
 const pvpBtn = document.getElementById('pvpBtn');
+const styleOptions = document.querySelectorAll('.style-option');
+styleOptions.forEach((opt) => {
+  opt.addEventListener('click', () => {
+    styleOptions.forEach((o) => o.classList.remove('selected'));
+    opt.classList.add('selected');
+    selectedStyle = opt.dataset.style;
+  });
+});
+if (styleOptions[0]) styleOptions[0].classList.add('selected');
 
 let mode = null; // 'pve' or 'pvp'
 let socket;
@@ -25,6 +34,17 @@ const FOOD_COUNT = 250;
 const MAX_PLAYER_SIZE = 250;
 const BLOCK_SIZE = 10;
 let cubeIdCounter = 0;
+
+const STYLES = {
+  cheese: { path: 'assets/styles/cheese.png', color: 0xffe066 },
+  watermelon: { path: 'assets/styles/watermelon.png', color: 0xff5577 },
+  meat: { path: 'assets/styles/meat.png', color: 0xff9999 },
+  orange: { path: 'assets/styles/orange.png', color: 0xffaa33 },
+  grass: { path: 'assets/styles/grass.png', color: 0x77cc55 },
+  salmon: { path: 'assets/styles/salmon.png', color: 0xff8888 }
+};
+
+let selectedStyle = 'cheese';
 
 function lighten(color, amount) {
   const rgb = PIXI.utils.hex2rgb(color);
@@ -147,7 +167,7 @@ function initGame() {
   cubes = [];
   effects = [];
 
-  player = createCube(0x00ff00, BLOCK_SIZE * 2); // start with 4 blocks
+  player = createCube(selectedStyle, BLOCK_SIZE * 2); // start with 4 blocks
   Body.setPosition(player.body, { x: 0, y: 0 });
   world.addChild(player);
 
@@ -180,19 +200,26 @@ function initGame() {
   setInterval(updateLeaderboard, 500);
 }
 
-function createCube(color, size, withPhysics = true) {
+function createCube(styleName, size, withPhysics = true) {
   const container = new PIXI.Container();
   container.cid = cubeIdCounter++;
   container.size = size;
-  container.color = color;
+  container.styleName = styleName;
+  container.color = STYLES[styleName].color;
   container.isCube = true;
   container.withPhysics = withPhysics;
   container.grid = [];
   const count = Math.round(size / BLOCK_SIZE);
   for (let i = 0; i < count; i++) {
     for (let j = 0; j < count; j++) {
-      const block = new PIXI.Graphics();
-      drawVoxel(block, color);
+      const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[styleName].path));
+      block.width = BLOCK_SIZE;
+      block.height = BLOCK_SIZE;
+      if (PIXI.filters && PIXI.filters.DropShadowFilter) {
+        block.filters = [
+          new PIXI.filters.DropShadowFilter({ distance: 1, blur: 2, alpha: 0.6 })
+        ];
+      }
       const bx = -size / 2 + i * BLOCK_SIZE;
       const by = -size / 2 + j * BLOCK_SIZE;
       block.x = bx;
@@ -389,8 +416,21 @@ function collectParticle(cube, p) {
   if (!cube.body && cube.grid.length === 0) return;
 
   removeParticle(p);
-  const block = new PIXI.Graphics();
-  drawVoxel(block, cube.color);
+  let block;
+  if (p.isFragment && p.texture) {
+    block = p;
+    block.rotation = 0;
+    block.alpha = 1;
+  } else {
+    block = new PIXI.Sprite(PIXI.Texture.from(STYLES[cube.styleName].path));
+    block.width = BLOCK_SIZE;
+    block.height = BLOCK_SIZE;
+    if (PIXI.filters && PIXI.filters.DropShadowFilter) {
+      block.filters = [
+        new PIXI.filters.DropShadowFilter({ distance: 1, blur: 2, alpha: 0.6 })
+      ];
+    }
+  }
   const pos = getRandomGrowthPosition(cube);
   block.x = pos.x;
   block.y = pos.y;
@@ -405,8 +445,10 @@ function collectParticle(cube, p) {
 }
 
 function createBots(count) {
+  const styleNames = Object.keys(STYLES);
   for (let i = 0; i < count; i++) {
-    const bot = createCube(0xff0000, BLOCK_SIZE * 2); // start with 4 blocks
+    const randStyle = styleNames[Math.floor(Math.random() * styleNames.length)];
+    const bot = createCube(randStyle, BLOCK_SIZE * 2); // start with 4 blocks
     Body.setPosition(bot.body, { x: (Math.random() - 0.5) * WORLD_SIZE, y: (Math.random() - 0.5) * WORLD_SIZE });
     bot.massSize = bot.grid.length;
     bot.target = null;
@@ -693,7 +735,7 @@ function setupSocket() {
 
 function createRemotePlayer(id) {
   if (remotePlayers[id]) return;
-  const g = createCube(0x0000ff, BLOCK_SIZE * 2, false); // start with 4 blocks
+  const g = createCube('cheese', BLOCK_SIZE * 2, false); // start with 4 blocks
   g.x = 0;
   g.y = 0;
   remotePlayers[id] = g;
