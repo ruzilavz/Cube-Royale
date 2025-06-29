@@ -480,6 +480,12 @@ function collectParticle(cube, p) {
 
   removeParticle(p);
   const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[cube.styleName].path));
+  if (block.texture?.baseTexture) {
+    const tex = block.texture.baseTexture;
+    const scaleX = BLOCK_SIZE / tex.width;
+    const scaleY = BLOCK_SIZE / tex.height;
+    block.scale.set(scaleX, scaleY);
+  }
   block.width = BLOCK_SIZE;
   block.height = BLOCK_SIZE;
   if (PIXI.filters && PIXI.filters.DropShadowFilter) {
@@ -503,6 +509,13 @@ function collectParticle(cube, p) {
 function growCube(cube, count = 1) {
   for (let i = 0; i < count; i++) {
     const block = new PIXI.Sprite(PIXI.Texture.from(STYLES[cube.styleName].path));
+    if (block.texture?.baseTexture) {
+      const tex = block.texture.baseTexture;
+      const scaleX = BLOCK_SIZE / tex.width;
+      const scaleY = BLOCK_SIZE / tex.height;
+      block.scale.set(scaleX, scaleY);
+    }
+
     block.width = BLOCK_SIZE;
     block.height = BLOCK_SIZE;
     if (PIXI.filters && PIXI.filters.DropShadowFilter) {
