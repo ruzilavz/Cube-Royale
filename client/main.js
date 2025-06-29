@@ -34,6 +34,7 @@ const FOOD_COUNT = 250;
 const MAX_PLAYER_SIZE = 250;
 const BLOCK_SIZE = 35;
 let cubeIdCounter = 0;
+const HIT_COOLDOWN = 500; // ms between damage from the same cube
 
 const STYLES = {
   cheese: { path: 'assets/styles/cheese.png', color: 0xffe066 },
@@ -231,6 +232,7 @@ function createCube(styleName, size, withPhysics = true) {
   container.massSize = container.grid.length;
   container.blockSize = BLOCK_SIZE;
   container.hitTime = 0;
+  container.lastHitTimes = {}; // track recent hits per other cube
   container.shakeTime = 0;
   if (withPhysics) {
     cubes.push(container);
@@ -547,6 +549,15 @@ function handleCollisions(event) {
 
 function collideCubes(c1, c2) {
   if (!c1 || !c2 || !c1.body || !c2.body) return;
+  const now = Date.now();
+  const last1 = c1.lastHitTimes[c2.cid] || 0;
+  const last2 = c2.lastHitTimes[c1.cid] || 0;
+  if (now - last1 < HIT_COOLDOWN || now - last2 < HIT_COOLDOWN) {
+    return; // avoid multiple hits in quick succession
+  }
+  c1.lastHitTimes[c2.cid] = now;
+  c2.lastHitTimes[c1.cid] = now;
+
   // capture positions before any cube might lose its physics body
   const pos1 = { x: c1.body.position.x, y: c1.body.position.y };
   const pos2 = { x: c2.body.position.x, y: c2.body.position.y };
