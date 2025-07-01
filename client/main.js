@@ -195,16 +195,18 @@ function addSnakeSegment(cube = player) {
   const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
   seg.parentCube = cube;
   seg.isSnakeSegment = true;
-  const tailIndex =
+  const spawnIndex = Math.max(
+    0,
     cube.positionHistory.length -
-    1 -
-    (cube.snakeSegments.length + 1) * SNAKE_HISTORY_STEP;
-  let historyPos = cube.positionHistory[tailIndex];
+      (cube.snakeSegments.length + 2) * SNAKE_HISTORY_STEP
+  );
+  let historyPos = cube.positionHistory[spawnIndex];
   if (!historyPos) {
-    historyPos = cube.positionHistory[0] || {
-      x: cube.body.position.x,
-      y: cube.body.position.y,
-    };
+    historyPos =
+      cube.positionHistory[0] || {
+        x: cube.body.position.x,
+        y: cube.body.position.y,
+      };
   }
   Body.setPosition(seg.body, historyPos);
   if (seg.body) seg.body.collisionFilter.group = -cube.cid;
@@ -760,15 +762,26 @@ function processEating(delta) {
 }
 
 function checkFoodCollisions() {
+  const seen = new Set();
+  const cubesToCheck = [];
   for (const c of cubes) {
-    if (!c.body && !c.isSnake && !(c.parentCube && c.parentCube.isSnake)) continue;
-    const cPos = c.body ? c.body.position : { x: c.x, y: c.y };
+    if (c.body) cubesToCheck.push(c);
+    if (c.isSnake) {
+      for (const seg of c.snakeSegments) {
+        if (seg.body) cubesToCheck.push(seg);
+      }
+    }
+  }
+  for (const cube of cubesToCheck) {
+    if (seen.has(cube)) continue;
+    seen.add(cube);
+    const cPos = cube.body ? cube.body.position : { x: cube.x, y: cube.y };
     for (const f of foods) {
       if (!f.body || f.collected) continue;
       const fSize = f.massSize || FOOD_SIZE;
       const dist = Vector.magnitude(Vector.sub(cPos, f.body.position));
-      if (dist < (c.size + fSize) / 2) {
-        collectParticle(c, f);
+      if (dist < (cube.size + fSize) / 2) {
+        collectParticle(cube, f);
       }
     }
   }
