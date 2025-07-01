@@ -109,6 +109,7 @@ function toggleSnake(cube = player) {
     cube.grid = cube.grid.filter((c) => c.size !== BLOCK_SIZE);
     cube.massSize = 1; // mass of the head only
     cube.positionHistory = [];
+    const headPos = cube.body ? { x: cube.body.position.x, y: cube.body.position.y } : { x: cube.x, y: cube.y };
     for (const cell of bodyCells) {
       cube.removeChild(cell.block);
       const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
@@ -136,6 +137,13 @@ function toggleSnake(cube = player) {
       newSegments.push(seg);
     }
     cube.snakeSegments = newSegments;
+    const totalSegs = cube.snakeSegments.length;
+    for (let i = totalSegs * SNAKE_HISTORY_STEP; i >= 0; i--) {
+      cube.positionHistory.push({
+        x: headPos.x - (i / SNAKE_HISTORY_STEP) * CELL_SIZE,
+        y: headPos.y,
+      });
+    }
     updateCubeLayout(cube);
     if (cube.body) cube.body.collisionFilter.group = -cube.cid;
     for (const seg of cube.snakeSegments) {
@@ -179,6 +187,10 @@ function addSnakeSegment(cube = player) {
   if (seg.body) seg.body.collisionFilter.group = -cube.cid;
   world.addChild(seg);
   segments.push(seg);
+  const initPos = { x: seg.body.position.x, y: seg.body.position.y };
+  for (let i = 0; i < SNAKE_HISTORY_STEP; i++) {
+    cube.positionHistory.unshift({ x: initPos.x, y: initPos.y });
+  }
 }
 
 function getMoveSpeed(cube = player) {
