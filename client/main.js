@@ -54,6 +54,7 @@ const EAT_INTERVAL = 15; // ticks between consuming blocks during eating
 const SPEED_BASE = 2;
 const SNAKE_SPEED = 3;
 const SNAKE_COOLDOWN = 3000; // ms
+const SNAKE_HISTORY_STEP = 2; // frames between segment positions
 let globalTime = 0;
 const BIG_CUBE_SIZE = 60;
 const BIG_CUBE_MASS = 10;
@@ -83,6 +84,7 @@ function initSnakeProps(cube) {
   cube.snakeSegments = [];
   cube.lastSnakeToggle = 0;
   cube.savedSnakeGrid = [];
+  cube.positionHistory = [];
 }
 
 function lighten(color, amount) {
@@ -106,6 +108,7 @@ function toggleSnake(cube = player) {
     cube.savedSnakeGrid = bodyCells.map((c) => ({ x: c.x, y: c.y }));
     cube.grid = cube.grid.filter((c) => c.size !== BLOCK_SIZE);
     cube.massSize = 1; // mass of the head only
+    cube.positionHistory = [];
     for (const cell of bodyCells) {
       cube.removeChild(cell.block);
       const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
@@ -159,6 +162,7 @@ function toggleSnake(cube = player) {
     cube.savedSnakeGrid = [];
     updateCubeLayout(cube);
     if (cube.body) cube.body.collisionFilter.group = 0;
+    cube.positionHistory = [];
     cube.isSnake = false;
   }
 }
@@ -810,16 +814,24 @@ function updateBots(delta) {
 
 function updateSnakeSegments(delta, cube) {
   if (!cube.body) return;
-  let prevPos = cube.body.position;
-  for (const seg of cube.snakeSegments) {
+  const headPos = { x: cube.body.position.x, y: cube.body.position.y };
+  cube.positionHistory.push(headPos);
+  const maxLen = (cube.snakeSegments.length + 1) * SNAKE_HISTORY_STEP * 5;
+  if (cube.positionHistory.length > maxLen) {
+    cube.positionHistory.splice(0, cube.positionHistory.length - maxLen);
+  }
+
+  for (let i = 0; i < cube.snakeSegments.length; i++) {
+    const seg = cube.snakeSegments[i];
     if (!seg.body) continue;
-    const dir = Vector.sub(prevPos, seg.body.position);
+    const histIndex = cube.positionHistory.length - 1 - (i + 1) * SNAKE_HISTORY_STEP;
+    const target = cube.positionHistory[histIndex] || cube.positionHistory[0] || headPos;
+    const dir = Vector.sub(target, seg.body.position);
     const dist = Vector.magnitude(dir);
-    if (dist > CELL_SIZE) {
+    if (dist > 0.1) {
       const moveDir = Vector.normalise(dir);
       Body.translate(seg.body, { x: moveDir.x * SNAKE_SPEED * delta, y: moveDir.y * SNAKE_SPEED * delta });
     }
-    prevPos = seg.body.position;
   }
 }
 
