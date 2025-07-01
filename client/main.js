@@ -67,11 +67,11 @@ let app,
 
 const { Engine, World: MWorld, Bodies, Body, Vector, Events } = Matter;
 
+const BLOCK_SIZE = 35;
 const WORLD_SIZE = 5000;
 const WORLD_LIMIT = WORLD_SIZE / 2 - BLOCK_SIZE;
 const FOOD_COUNT = 250;
 const MAX_PLAYER_SIZE = 250;
-const BLOCK_SIZE = 35;
 const SPACING = 0;
 const CELL_SIZE = BLOCK_SIZE + SPACING;
 const FOOD_SIZE = 25;
