@@ -83,7 +83,7 @@ const SPEED_BASE = 2;
 // Movement speed while in snake form
 const SNAKE_SPEED = 3;
 const SNAKE_COOLDOWN = 3000; // ms
-const SNAKE_HISTORY_STEP = 6; // frames between segment positions
+const SNAKE_HISTORY_STEP = 12; // frames between segment positions
 let globalTime = 0;
 const BIG_CUBE_SIZE = 60;
 const BIG_CUBE_MASS = 10;
