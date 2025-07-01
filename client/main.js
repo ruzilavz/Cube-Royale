@@ -123,7 +123,7 @@ function toggleSnake(cube = player) {
     const headPos = cube.body ? { x: cube.body.position.x, y: cube.body.position.y } : { x: cube.x, y: cube.y };
     for (const cell of bodyCells) {
       cube.removeChild(cell.block);
-      const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
+      const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1, true);
       seg.parentCube = cube;
       seg.isSnakeSegment = true;
         if (cube.body) {
@@ -138,7 +138,7 @@ function toggleSnake(cube = player) {
     }
     const extra = Math.max(0, prevMass - 1 - bodyCells.length);
     for (let i = 0; i < extra; i++) {
-      const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
+      const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1, true);
       seg.parentCube = cube;
         if (cube.body) {
           const off = cube.size / 2 + (newSegments.length + 0.5) * CELL_SIZE;
@@ -192,7 +192,7 @@ function toggleSnake(cube = player) {
 
 function addSnakeSegment(cube = player) {
   if (!cube.isSnake) return;
-  const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
+  const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1, true);
   seg.parentCube = cube;
   seg.isSnakeSegment = true;
   const spawnIndex = Math.max(
@@ -379,13 +379,14 @@ function initGame() {
   setInterval(updateLeaderboard, 500);
 }
 
-function createCube(styleName, blockSize = BLOCK_SIZE, mass = null, withPhysics = true, cells = 1) {
+function createCube(styleName, blockSize = BLOCK_SIZE, mass = null, withPhysics = true, cells = 1, sensor = false) {
   const container = new PIXI.Container();
   container.cid = cubeIdCounter++;
   container.styleName = styleName;
   container.color = STYLES[styleName].color;
   container.isCube = true;
   container.withPhysics = withPhysics;
+  container.isSensor = sensor;
   container.grid = [];
   initSnakeProps(container);
   const size = blockSize * cells;
@@ -481,7 +482,8 @@ function updateCubeLayout(cube) {
         cell.x + cell.size / 2,
         cell.y + cell.size / 2,
         cell.size,
-        cell.size
+        cell.size,
+        { isSensor: cube.isSensor }
       );
 
       part.g = cube;
@@ -495,6 +497,7 @@ function updateCubeLayout(cube) {
     friction: 0,
     frictionStatic: 0,
     restitution: 0.05,
+    isSensor: cube.isSensor,
   });
     Body.setPosition(body, { x: pos.x + cx, y: pos.y + cy });
     Body.setVelocity(body, vel);
