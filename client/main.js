@@ -601,7 +601,7 @@ function collectParticle(cube, p) {
   if (p.pickupCooldown && Date.now() < p.pickupCooldown) return;
   if (p.enemyCooldown && p.ownerId && p.ownerId !== cube.cid && Date.now() < p.enemyCooldown) return;
   if (p.forbidOwner && p.sourceId === cube.cid) return;
-  if (!cube.body && cube.grid.length === 0) return;
+  if (!cube.body && cube.grid.length === 0 && !cube.isSnake && !(cube.parentCube && cube.parentCube.isSnake)) return;
 
   p.collected = true;
 
@@ -724,11 +724,12 @@ function processEating(delta) {
 
 function checkFoodCollisions() {
   for (const c of cubes) {
-    if (!c.body) continue;
+    if (!c.body && !c.isSnake && !(c.parentCube && c.parentCube.isSnake)) continue;
+    const cPos = c.body ? c.body.position : { x: c.x, y: c.y };
     for (const f of foods) {
       if (!f.body || f.collected) continue;
       const fSize = f.massSize || FOOD_SIZE;
-      const dist = Vector.magnitude(Vector.sub(c.body.position, f.body.position));
+      const dist = Vector.magnitude(Vector.sub(cPos, f.body.position));
       if (dist < (c.size + fSize) / 2) {
         collectParticle(c, f);
       }
