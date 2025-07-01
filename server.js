@@ -63,6 +63,8 @@ io.on("connection", (socket) => {
       style: data.style,
       isSnake: data.isSnake,
       segments: data.segments,
+      mass: data.mass,
+      score: data.score,
     });
   });
 

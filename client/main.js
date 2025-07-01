@@ -5,6 +5,20 @@ const styleBtn = document.getElementById('styleBtn');
 const closeStyleBtn = document.getElementById('closeStyleBtn');
 const styleModal = document.getElementById('styleModal');
 const styleOptions = document.querySelectorAll('.style-option');
+const coinCountEl = document.getElementById('coinCount');
+let coins = parseInt(localStorage.getItem('coins') || '0', 10);
+
+function updateCoinUI() {
+  if (coinCountEl) coinCountEl.textContent = coins;
+}
+
+function addCoins(amount) {
+  coins += amount;
+  localStorage.setItem('coins', coins);
+  updateCoinUI();
+}
+
+updateCoinUI();
 styleOptions.forEach((opt) => {
   opt.addEventListener('click', () => {
     styleOptions.forEach((o) => o.classList.remove('selected'));
@@ -228,10 +242,19 @@ function getMoveSpeed(cube = player) {
   return SPEED_BASE;
 }
 
+function getCubeMass(c) {
+  let mass = 0;
+  for (const cell of c.grid) {
+    mass += cell.size === BIG_CUBE_SIZE ? BIG_CUBE_MASS : 1;
+  }
+  return mass;
+}
+
 function getTotalMass(cube) {
-  let m = cube.massSize;
+  if (!cube) return 0;
+  let m = getCubeMass(cube);
   if (cube.snakeSegments) {
-    for (const s of cube.snakeSegments) m += s.massSize;
+    for (const s of cube.snakeSegments) m += getCubeMass(s);
   }
   return m;
 }
@@ -534,7 +557,7 @@ function destroyCube(cube) {
   }
   if (cube === player) {
     player = null;
-    showGameOver();
+    showGameOver(cube.score || 0);
   }
   const bIdx = bots.indexOf(cube);
   if (bIdx !== -1) bots.splice(bIdx, 1);
@@ -634,6 +657,8 @@ function gameLoop(delta, targetX, targetY) {
           x: s.body ? s.body.position.x : s.x,
           y: s.body ? s.body.position.y : s.y,
         })),
+        mass: getTotalMass(player),
+        score: player.score || 0,
       });
     }
   }
@@ -1233,7 +1258,8 @@ function setupSocket() {
     rp.x = data.x;
     rp.y = data.y;
     rp.styleName = data.style || rp.styleName;
-    rp.massSize = data.size;
+    rp.mass = data.mass;
+    rp.score = data.score;
     if (data.isSnake) {
       if (!rp.isSnake) {
         rp.isSnake = true;
@@ -1270,6 +1296,7 @@ function createRemotePlayer(id, style = 'cheese') {
   g.x = 0;
   g.y = 0;
   g.score = 0;
+  g.mass = 0;
   remotePlayers[id] = g;
   world.addChild(g);
 }
@@ -1296,7 +1323,8 @@ function updateLeaderboard() {
     entries.push({
       name: 'You',
       color: player.color,
-      mass: getTotalMass(player) + (player.score || 0),
+      mass: getTotalMass(player),
+      score: player.score || 0,
       style: player.styleName,
       me: true
     });
@@ -1306,7 +1334,8 @@ function updateLeaderboard() {
     entries.push({
       name: 'Bot',
       color: bot.color,
-      mass: getTotalMass(bot) + (bot.score || 0),
+      mass: getTotalMass(bot),
+      score: bot.score || 0,
       style: bot.styleName
     });
   }
@@ -1316,12 +1345,13 @@ function updateLeaderboard() {
     entries.push({
       name: id.slice(0, 4),
       color: rp.color,
-      mass: (rp.massSize || 0) + (rp.score || 0),
+      mass: rp.mass || 0,
+      score: rp.score || 0,
       style: rp.styleName
     });
   }
 
-  entries.sort((a, b) => b.mass - a.mass);
+  entries.sort((a, b) => b.mass + b.score - (a.mass + a.score));
   const top = entries.slice(0, 10);
 
   top.forEach((e, i) => {
@@ -1337,7 +1367,7 @@ function updateLeaderboard() {
       fontSize: 14,
       fontWeight: e.me ? 'bold' : 'normal'
     });
-    const text = new PIXI.Text(`${i + 1}. ${e.mass}`, style);
+    const text = new PIXI.Text(`${i + 1}. M:${e.mass} S:${e.score}`, style);
     text.x = 18;
     row.addChild(text);
 
@@ -1351,7 +1381,8 @@ function updateLeaderboard() {
   }
 }
 
-function showGameOver() {
+function showGameOver(score = 0) {
+  addCoins(score);
   if (!app) return;
   const style = new PIXI.TextStyle({
     fill: '#ff4444',
@@ -1361,7 +1392,7 @@ function showGameOver() {
     strokeThickness: 4,
     align: 'center',
   });
-  const text = new PIXI.Text('Вы проиграли!', style);
+  const text = new PIXI.Text(`Вы проиграли! Score: ${score}`, style);
   text.anchor.set(0.5);
   text.x = app.screen.width / 2;
   text.y = app.screen.height / 2;
@@ -1391,6 +1422,7 @@ function showGameOver() {
 
 function showWin() {
   if (!app) return;
+  addCoins(player?.score || 0);
   const style = new PIXI.TextStyle({
     fill: '#44ff44',
     fontSize: 48,
@@ -1399,8 +1431,7 @@ function showWin() {
     strokeThickness: 4,
     align: 'center',
   });
-  const total = (player ? getTotalMass(player) : 0) + (player?.score || 0);
-  const text = new PIXI.Text(`You Win! Score: ${total}`, style);
+  const text = new PIXI.Text(`You Win! Score: ${player?.score || 0}`, style);
   text.anchor.set(0.5);
   text.x = app.screen.width / 2;
   text.y = app.screen.height / 2;
