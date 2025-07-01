@@ -614,7 +614,17 @@ function gameLoop(delta, targetX, targetY) {
     updateBots(delta);
   } else if (mode === 'pvp' && socket) {
     if (player && player.body) {
-      socket.emit('update', { x: player.body.position.x, y: player.body.position.y, size: player.size });
+      socket.emit('update', {
+        x: player.body.position.x,
+        y: player.body.position.y,
+        size: player.size,
+        style: player.styleName,
+        isSnake: player.isSnake,
+        segments: player.snakeSegments.map((s) => ({
+          x: s.body ? s.body.position.x : s.x,
+          y: s.body ? s.body.position.y : s.y,
+        })),
+      });
     }
   }
 
@@ -1155,15 +1165,15 @@ function syncGraphics() {
 function setupSocket() {
   socket = io();
   socket.on('connect', () => {
-    socket.emit('join-room');
+    socket.emit('join-room', { style: selectedStyle });
   });
 
-  socket.on('current-players', (ids) => {
-    ids.forEach((id) => createRemotePlayer(id));
+  socket.on('current-players', (players) => {
+    players.forEach((p) => createRemotePlayer(p.id, p.style));
   });
 
-  socket.on('player-joined', (id) => {
-    createRemotePlayer(id);
+  socket.on('player-joined', (data) => {
+    createRemotePlayer(data.id, data.style);
   });
 
   socket.on('player-left', (id) => {
@@ -1171,17 +1181,48 @@ function setupSocket() {
   });
 
   socket.on('player-update', (data) => {
-    const rp = remotePlayers[data.id];
-    if (rp) {
-      rp.x = data.x;
-      rp.y = data.y;
+    let rp = remotePlayers[data.id];
+    if (!rp) {
+      createRemotePlayer(data.id, data.style);
+      rp = remotePlayers[data.id];
+    }
+    rp.x = data.x;
+    rp.y = data.y;
+    rp.styleName = data.style || rp.styleName;
+    rp.massSize = data.size;
+    if (data.isSnake) {
+      if (!rp.isSnake) {
+        rp.isSnake = true;
+      }
+      while (rp.snakeSegments.length < data.segments.length) {
+        const seg = createCube(rp.styleName, BLOCK_SIZE, null, false, 1);
+        seg.parentCube = rp;
+        seg.isSnakeSegment = true;
+        world.addChild(seg);
+        rp.snakeSegments.push(seg);
+      }
+      while (rp.snakeSegments.length > data.segments.length) {
+        const seg = rp.snakeSegments.pop();
+        world.removeChild(seg);
+      }
+      for (let i = 0; i < data.segments.length; i++) {
+        const seg = rp.snakeSegments[i];
+        seg.x = data.segments[i].x;
+        seg.y = data.segments[i].y;
+      }
+    } else if (rp.isSnake) {
+      for (const seg of rp.snakeSegments) {
+        world.removeChild(seg);
+      }
+      rp.snakeSegments = [];
+      rp.isSnake = false;
     }
   });
 }
 
-function createRemotePlayer(id) {
+function createRemotePlayer(id, style = 'cheese') {
   if (remotePlayers[id]) return;
-  const g = createCube('cheese', BIG_CUBE_SIZE, null, false, 1); // big central cube
+  const g = createCube(style, BIG_CUBE_SIZE, null, false, 1); // big central cube
   g.x = 0;
   g.y = 0;
   remotePlayers[id] = g;
@@ -1191,6 +1232,12 @@ function createRemotePlayer(id) {
 function removeRemotePlayer(id) {
   const g = remotePlayers[id];
   if (!g) return;
+  if (g.snakeSegments) {
+    for (const seg of g.snakeSegments) {
+      world.removeChild(seg);
+    }
+    g.snakeSegments = [];
+  }
   world.removeChild(g);
   delete remotePlayers[id];
 }
