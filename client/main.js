@@ -48,9 +48,7 @@ let app,
   effects = [],
   leaderboardContainer,
   mouseMoveHandler,
-  touchMoveHandler,
-  snakeKeyHandler,
-  snakeClickHandler;
+  touchMoveHandler
 
 const { Engine, World: MWorld, Bodies, Body, Vector, Events } = Matter;
 
