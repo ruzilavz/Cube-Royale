@@ -581,6 +581,7 @@ function gameLoop(delta, targetX, targetY) {
     }
   }
 
+  checkFoodCollisions();
   processEating(delta);
 
   syncGraphics();
@@ -716,6 +717,20 @@ function processEating(delta) {
       }
       if (t.grid.length === 0) {
         c.eatTarget = null;
+      }
+    }
+  }
+}
+
+function checkFoodCollisions() {
+  for (const c of cubes) {
+    if (!c.body) continue;
+    for (const f of foods) {
+      if (!f.body || f.collected) continue;
+      const fSize = f.massSize || FOOD_SIZE;
+      const dist = Vector.magnitude(Vector.sub(c.body.position, f.body.position));
+      if (dist < (c.size + fSize) / 2) {
+        collectParticle(c, f);
       }
     }
   }
