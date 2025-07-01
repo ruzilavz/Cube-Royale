@@ -15,6 +15,8 @@ const MAX_PLAYERS = 10;
 
 // Информация о комнатах: { roomId: Set(socket.id) }
 const rooms = {};
+// Дополнительные данные об игроках
+const players = {};
 
 function findRoom() {
   for (const [id, players] of Object.entries(rooms)) {
@@ -31,18 +33,23 @@ function findRoom() {
 io.on("connection", (socket) => {
   console.log("Игрок подключился:", socket.id);
 
-  socket.on("join-room", () => {
+  socket.on("join-room", (data) => {
     const roomId = findRoom();
     socket.join(roomId);
     socket.roomId = roomId;
     rooms[roomId].add(socket.id);
+    players[socket.id] = { style: data?.style || "cheese" };
 
     // Отправить новому игроку уже находящихся в комнате
-    const others = Array.from(rooms[roomId]).filter((id) => id !== socket.id);
+    const others = Array.from(rooms[roomId])
+      .filter((id) => id !== socket.id)
+      .map((id) => ({ id, style: players[id]?.style || "cheese" }));
     socket.emit("current-players", others);
 
     // Уведомить других игроков
-    socket.to(roomId).emit("player-joined", socket.id);
+    socket
+      .to(roomId)
+      .emit("player-joined", { id: socket.id, style: players[socket.id].style });
     console.log(`Игрок ${socket.id} в комнате ${roomId}`);
   });
 
@@ -53,6 +60,9 @@ io.on("connection", (socket) => {
       x: data.x,
       y: data.y,
       size: data.size,
+      style: data.style,
+      isSnake: data.isSnake,
+      segments: data.segments,
     });
   });
 
@@ -66,6 +76,7 @@ io.on("connection", (socket) => {
         delete rooms[roomId];
       }
     }
+    delete players[socket.id];
   });
 });
 
