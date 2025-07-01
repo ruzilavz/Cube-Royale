@@ -191,24 +191,17 @@ function toggleSnake(cube = player) {
 }
 
 function addSnakeSegment(cube = player) {
+  if (!cube.isSnake) return;
   const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
   seg.parentCube = cube;
   seg.isSnakeSegment = true;
-  let base = cube.body.position;
-  const segments = cube.snakeSegments;
-  let baseSize = cube.size;
-  if (segments.length > 0 && segments[segments.length - 1].body) {
-    base = segments[segments.length - 1].body.position;
-    baseSize = BLOCK_SIZE;
-  }
-  const off = baseSize / 2 + BLOCK_SIZE / 2;
-  Body.setPosition(seg.body, { x: base.x - off, y: base.y });
+  const historyPos = cube.positionHistory[0] || { x: cube.body.position.x, y: cube.body.position.y };
+  Body.setPosition(seg.body, historyPos);
   if (seg.body) seg.body.collisionFilter.group = -cube.cid;
   world.addChild(seg);
-  segments.push(seg);
-  const initPos = { x: seg.body.position.x, y: seg.body.position.y };
+  cube.snakeSegments.push(seg);
   for (let i = 0; i < SNAKE_HISTORY_STEP; i++) {
-    cube.positionHistory.unshift({ x: initPos.x, y: initPos.y });
+    cube.positionHistory.unshift({ x: historyPos.x, y: historyPos.y });
   }
 }
 
@@ -876,12 +869,7 @@ function updateSnakeSegments(delta, cube) {
     if (!seg.body) continue;
     const histIndex = cube.positionHistory.length - 1 - (i + 1) * SNAKE_HISTORY_STEP;
     const target = cube.positionHistory[histIndex] || cube.positionHistory[0] || headPos;
-    const dir = Vector.sub(target, seg.body.position);
-    const dist = Vector.magnitude(dir);
-    if (dist > 0.1) {
-      const moveDir = Vector.normalise(dir);
-      Body.translate(seg.body, { x: moveDir.x * SNAKE_SPEED * delta, y: moveDir.y * SNAKE_SPEED * delta });
-    }
+    Body.setPosition(seg.body, target);
   }
 }
 
