@@ -114,6 +114,7 @@ function toggleSnake(cube = player) {
       cube.removeChild(cell.block);
       const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
       seg.parentCube = cube;
+      seg.isSnakeSegment = true;
       if (cube.body) {
         Body.setPosition(seg.body, {
           x: cube.body.position.x - (newSegments.length + 1) * CELL_SIZE,
@@ -178,6 +179,7 @@ function toggleSnake(cube = player) {
 function addSnakeSegment(cube = player) {
   const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
   seg.parentCube = cube;
+  seg.isSnakeSegment = true;
   let base = cube.body.position;
   const segments = cube.snakeSegments;
   if (segments.length > 0 && segments[segments.length - 1].body) {
@@ -600,10 +602,12 @@ function gameLoop(delta, targetX, targetY) {
 }
 
 function removeParticle(p) {
-  if (!p.body) return;
-  MWorld.remove(engine.world, p.body);
-  p.body = null;
-  world.removeChild(p);
+  if (p.body) {
+    MWorld.remove(engine.world, p.body);
+    p.body = null;
+  }
+  // ensure sprite is removed even if body was already null
+  if (p.parent) p.parent.removeChild(p); else world.removeChild(p);
   const idx = foods.indexOf(p);
   if (idx !== -1) foods.splice(idx, 1);
 }
