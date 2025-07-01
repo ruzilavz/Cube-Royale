@@ -2,7 +2,6 @@ const menu = document.getElementById('menu');
 const pveBtn = document.getElementById('pveBtn');
 const pvpBtn = document.getElementById('pvpBtn');
 const styleBtn = document.getElementById('styleBtn');
-const snakeBtn = document.getElementById('snakeBtn');
 const closeStyleBtn = document.getElementById('closeStyleBtn');
 const styleModal = document.getElementById('styleModal');
 const styleOptions = document.querySelectorAll('.style-option');
@@ -23,15 +22,10 @@ closeStyleBtn.addEventListener('click', () => {
   styleModal.style.display = 'none';
 });
 
-// Кнопка переключения режима змейки
-if (snakeBtn) {
-  snakeBtn.addEventListener('click', () => {
-    toggleSnake();
-  });
-}
 
 // Переключение на пробел
 let snakeKeyHandler;
+let snakeClickHandler;
 snakeKeyHandler = (e) => {
   if (e.code === 'Space') {
     e.preventDefault();
@@ -55,7 +49,8 @@ let app,
   leaderboardContainer,
   mouseMoveHandler,
   touchMoveHandler,
-  snakeKeyHandler;
+  snakeKeyHandler,
+  snakeClickHandler;
 
 const { Engine, World: MWorld, Bodies, Body, Vector, Events } = Matter;
 
@@ -372,6 +367,10 @@ function initGame() {
   window.addEventListener('mousemove', mouseMoveHandler);
   window.addEventListener('touchmove', touchMoveHandler);
 
+  snakeClickHandler = () => {
+    toggleSnake();
+  };
+  window.addEventListener('mousedown', snakeClickHandler);
 
   app.ticker.add((delta) => gameLoop(delta, targetX, targetY));
   setInterval(updateLeaderboard, 500);
@@ -1268,6 +1267,7 @@ function showGameOver() {
   if (mouseMoveHandler) window.removeEventListener('mousemove', mouseMoveHandler);
   if (touchMoveHandler) window.removeEventListener('touchmove', touchMoveHandler);
   if (snakeKeyHandler) window.removeEventListener('keydown', snakeKeyHandler);
+  if (snakeClickHandler) window.removeEventListener('mousedown', snakeClickHandler);
 
 
   setTimeout(() => {
