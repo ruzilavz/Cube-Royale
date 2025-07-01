@@ -2,6 +2,7 @@ const menu = document.getElementById('menu');
 const pveBtn = document.getElementById('pveBtn');
 const pvpBtn = document.getElementById('pvpBtn');
 const styleBtn = document.getElementById('styleBtn');
+const snakeBtn = document.getElementById('snakeBtn');
 const closeStyleBtn = document.getElementById('closeStyleBtn');
 const styleModal = document.getElementById('styleModal');
 const styleOptions = document.querySelectorAll('.style-option');
@@ -22,6 +23,23 @@ closeStyleBtn.addEventListener('click', () => {
   styleModal.style.display = 'none';
 });
 
+// Кнопка переключения режима змейки
+if (snakeBtn) {
+  snakeBtn.addEventListener('click', () => {
+    toggleSnake();
+  });
+}
+
+// Переключение на пробел
+let snakeKeyHandler;
+snakeKeyHandler = (e) => {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    toggleSnake();
+  }
+};
+window.addEventListener('keydown', snakeKeyHandler);
+
 let mode = null; // 'pve' or 'pvp'
 let socket;
 
@@ -37,7 +55,7 @@ let app,
   leaderboardContainer,
   mouseMoveHandler,
   touchMoveHandler,
-  toggleSnakeHandler;
+  snakeKeyHandler;
 
 const { Engine, World: MWorld, Bodies, Body, Vector, Events } = Matter;
 
@@ -115,12 +133,13 @@ function toggleSnake(cube = player) {
       const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
       seg.parentCube = cube;
       seg.isSnakeSegment = true;
-      if (cube.body) {
-        Body.setPosition(seg.body, {
-          x: cube.body.position.x - (newSegments.length + 1) * CELL_SIZE,
-          y: cube.body.position.y,
-        });
-      }
+        if (cube.body) {
+          const off = cube.size / 2 + (newSegments.length + 0.5) * CELL_SIZE;
+          Body.setPosition(seg.body, {
+            x: cube.body.position.x - off,
+            y: cube.body.position.y,
+          });
+        }
       world.addChild(seg);
       newSegments.push(seg);
     }
@@ -128,23 +147,25 @@ function toggleSnake(cube = player) {
     for (let i = 0; i < extra; i++) {
       const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
       seg.parentCube = cube;
-      if (cube.body) {
-        Body.setPosition(seg.body, {
-          x: cube.body.position.x - (newSegments.length + 1) * CELL_SIZE,
-          y: cube.body.position.y,
-        });
-      }
+        if (cube.body) {
+          const off = cube.size / 2 + (newSegments.length + 0.5) * CELL_SIZE;
+          Body.setPosition(seg.body, {
+            x: cube.body.position.x - off,
+            y: cube.body.position.y,
+          });
+        }
       world.addChild(seg);
       newSegments.push(seg);
     }
     cube.snakeSegments = newSegments;
-    const totalSegs = cube.snakeSegments.length;
-    for (let i = totalSegs * SNAKE_HISTORY_STEP; i >= 0; i--) {
-      cube.positionHistory.push({
-        x: headPos.x - (i / SNAKE_HISTORY_STEP) * CELL_SIZE,
-        y: headPos.y,
-      });
-    }
+      const totalSegs = cube.snakeSegments.length;
+      for (let i = totalSegs * SNAKE_HISTORY_STEP; i >= 0; i--) {
+        const off = cube.size / 2 + (i / SNAKE_HISTORY_STEP - 0.5) * CELL_SIZE;
+        cube.positionHistory.push({
+          x: headPos.x - off,
+          y: headPos.y,
+        });
+      }
     updateCubeLayout(cube);
     if (cube.body) cube.body.collisionFilter.group = -cube.cid;
     for (const seg of cube.snakeSegments) {
@@ -182,10 +203,13 @@ function addSnakeSegment(cube = player) {
   seg.isSnakeSegment = true;
   let base = cube.body.position;
   const segments = cube.snakeSegments;
+  let baseSize = cube.size;
   if (segments.length > 0 && segments[segments.length - 1].body) {
     base = segments[segments.length - 1].body.position;
+    baseSize = BLOCK_SIZE;
   }
-  Body.setPosition(seg.body, { x: base.x - CELL_SIZE, y: base.y });
+  const off = baseSize / 2 + BLOCK_SIZE / 2;
+  Body.setPosition(seg.body, { x: base.x - off, y: base.y });
   if (seg.body) seg.body.collisionFilter.group = -cube.cid;
   world.addChild(seg);
   segments.push(seg);
@@ -347,9 +371,6 @@ function initGame() {
   };
   window.addEventListener('mousemove', mouseMoveHandler);
   window.addEventListener('touchmove', touchMoveHandler);
-  toggleSnakeHandler = () => toggleSnake();
-  window.addEventListener('mousedown', toggleSnakeHandler);
-  window.addEventListener('touchstart', toggleSnakeHandler);
 
 
   app.ticker.add((delta) => gameLoop(delta, targetX, targetY));
@@ -1246,10 +1267,8 @@ function showGameOver() {
 
   if (mouseMoveHandler) window.removeEventListener('mousemove', mouseMoveHandler);
   if (touchMoveHandler) window.removeEventListener('touchmove', touchMoveHandler);
-  if (toggleSnakeHandler) {
-    window.removeEventListener('mousedown', toggleSnakeHandler);
-    window.removeEventListener('touchstart', toggleSnakeHandler);
-  }
+  if (snakeKeyHandler) window.removeEventListener('keydown', snakeKeyHandler);
+
 
   setTimeout(() => {
     if (typeof goToMainMenu === 'function') {
