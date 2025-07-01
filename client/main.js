@@ -160,9 +160,10 @@ function toggleSnake(cube = player) {
         });
       }
     updateCubeLayout(cube);
-    if (cube.body) cube.body.collisionFilter.group = -cube.cid;
+    const group = -(cube.cid + 1);
+    if (cube.body) cube.body.collisionFilter.group = group;
     for (const seg of cube.snakeSegments) {
-      if (seg.body) seg.body.collisionFilter.group = -cube.cid;
+      if (seg.body) seg.body.collisionFilter.group = group;
     }
     cube.isSnake = true;
   } else {
@@ -209,7 +210,7 @@ function addSnakeSegment(cube = player) {
       };
   }
   Body.setPosition(seg.body, historyPos);
-  if (seg.body) seg.body.collisionFilter.group = -cube.cid;
+  if (seg.body) seg.body.collisionFilter.group = -(cube.cid + 1);
   world.addChild(seg);
   cube.snakeSegments.push(seg);
   for (let i = 0; i < SNAKE_HISTORY_STEP; i++) {
