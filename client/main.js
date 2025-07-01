@@ -48,7 +48,8 @@ let app,
   effects = [],
   leaderboardContainer,
   mouseMoveHandler,
-  touchMoveHandler
+  touchMoveHandler,
+  hasWon = false
 
 const { Engine, World: MWorld, Bodies, Body, Vector, Events } = Matter;
 
@@ -71,6 +72,7 @@ const SNAKE_HISTORY_STEP = 2; // frames between segment positions
 let globalTime = 0;
 const BIG_CUBE_SIZE = 60;
 const BIG_CUBE_MASS = 10;
+const MAX_TOTAL_MASS = 300;
 
 const STYLES = {
   cheese: { path: 'assets/styles/cheese.png', color: 0xffe066 },
@@ -195,6 +197,7 @@ function toggleSnake(cube = player) {
 
 function addSnakeSegment(cube = player) {
   if (!cube.isSnake) return;
+  if (getTotalMass(cube) >= MAX_TOTAL_MASS) return;
   const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1, true);
   seg.parentCube = cube;
   seg.isSnakeSegment = true;
@@ -408,10 +411,11 @@ function createCube(styleName, blockSize = BLOCK_SIZE, mass = null, withPhysics 
       block.x = bx;
       block.y = by;
       container.addChild(block);
-      container.grid.push({ block, x: bx, y: by, size: blockSize });
+  container.grid.push({ block, x: bx, y: by, size: blockSize });
     }
   }
   container.massSize = mass !== null ? mass : container.grid.length;
+  container.score = 0;
   container.blockSize = blockSize;
   container.hitTime = 0;
   container.lastHitTimes = {}; // track recent hits per other cube
@@ -661,6 +665,12 @@ function collectParticle(cube, p) {
   p.collected = true;
 
   removeParticle(p);
+  const owner = cube.parentCube && cube.parentCube.isSnake ? cube.parentCube : cube;
+  if (owner.score === undefined) owner.score = 0;
+  if (getTotalMass(owner) >= MAX_TOTAL_MASS) {
+    owner.score += 1;
+    return;
+  }
   if (cube.isSnake) {
     addSnakeSegment(cube);
     return;
@@ -699,6 +709,8 @@ function collectParticle(cube, p) {
 
 function growCube(cube, count = 1) {
   for (let i = 0; i < count; i++) {
+    const owner = cube.parentCube && cube.parentCube.isSnake ? cube.parentCube : cube;
+    if (getTotalMass(owner) >= MAX_TOTAL_MASS) break;
     if (cube.isSnake) {
       addSnakeSegment(cube);
       continue;
@@ -962,21 +974,29 @@ function collideCubes(c1, c2) {
   const pos1 = { x: c1.body.position.x, y: c1.body.position.y };
   const pos2 = { x: c2.body.position.x, y: c2.body.position.y };
 
-  // If two snake heads collide, nothing happens
-  if (
-    c1.isSnake && !c1.parentCube &&
-    c2.isSnake && !c2.parentCube
-  ) {
-    return;
-  }
+  const c1Head = c1.isSnake && !c1.parentCube;
+  const c2Head = c2.isSnake && !c2.parentCube;
+  const c1Body = c1.parentCube && c1.parentCube.isSnake;
+  const c2Body = c2.parentCube && c2.parentCube.isSnake;
 
-  // Head can destroy body segments without taking damage
-  if (c1.isSnake && !c1.parentCube && c2.parentCube) {
+  if (c1Head && c2Head) {
+    if (c1.snakeSegments.length > 0 || c2.snakeSegments.length > 0) {
+      return;
+    }
+    removeCubeBlocks(c1, 1, pos2);
     removeCubeBlocks(c2, 1, pos1);
     return;
   }
-  if (c2.isSnake && !c2.parentCube && c1.parentCube) {
+
+  if (c1Body && c2Body) {
+    return;
+  }
+  if (c1Body && !c2Body) {
     removeCubeBlocks(c1, 1, pos2);
+    return;
+  }
+  if (c2Body && !c1Body) {
+    removeCubeBlocks(c2, 1, pos1);
     return;
   }
 
@@ -1249,6 +1269,7 @@ function createRemotePlayer(id, style = 'cheese') {
   const g = createCube(style, BIG_CUBE_SIZE, null, false, 1); // big central cube
   g.x = 0;
   g.y = 0;
+  g.score = 0;
   remotePlayers[id] = g;
   world.addChild(g);
 }
@@ -1275,7 +1296,7 @@ function updateLeaderboard() {
     entries.push({
       name: 'You',
       color: player.color,
-      mass: getTotalMass(player),
+      mass: getTotalMass(player) + (player.score || 0),
       style: player.styleName,
       me: true
     });
@@ -1285,7 +1306,7 @@ function updateLeaderboard() {
     entries.push({
       name: 'Bot',
       color: bot.color,
-      mass: getTotalMass(bot),
+      mass: getTotalMass(bot) + (bot.score || 0),
       style: bot.styleName
     });
   }
@@ -1295,7 +1316,7 @@ function updateLeaderboard() {
     entries.push({
       name: id.slice(0, 4),
       color: rp.color,
-      mass: rp.massSize,
+      mass: (rp.massSize || 0) + (rp.score || 0),
       style: rp.styleName
     });
   }
@@ -1323,6 +1344,11 @@ function updateLeaderboard() {
     row.y = i * 18;
     leaderboardContainer.addChild(row);
   });
+
+  if (mode === 'pvp' && player && !hasWon && Object.keys(remotePlayers).length === 0) {
+    hasWon = true;
+    showWin();
+  }
 }
 
 function showGameOver() {
@@ -1349,6 +1375,44 @@ function showGameOver() {
   if (snakeKeyHandler) window.removeEventListener('keydown', snakeKeyHandler);
   if (snakeClickHandler) window.removeEventListener('mousedown', snakeClickHandler);
 
+
+  setTimeout(() => {
+    if (typeof goToMainMenu === 'function') {
+      try {
+        goToMainMenu();
+      } catch (e) {
+        location.reload();
+      }
+    } else {
+      location.reload();
+    }
+  }, 3000);
+}
+
+function showWin() {
+  if (!app) return;
+  const style = new PIXI.TextStyle({
+    fill: '#44ff44',
+    fontSize: 48,
+    fontWeight: 'bold',
+    stroke: '#000000',
+    strokeThickness: 4,
+    align: 'center',
+  });
+  const total = (player ? getTotalMass(player) : 0) + (player?.score || 0);
+  const text = new PIXI.Text(`You Win! Score: ${total}`, style);
+  text.anchor.set(0.5);
+  text.x = app.screen.width / 2;
+  text.y = app.screen.height / 2;
+  if (PIXI.filters && PIXI.filters.DropShadowFilter) {
+    text.filters = [new PIXI.filters.DropShadowFilter({ distance: 2, blur: 2, alpha: 0.7 })];
+  }
+  app.stage.addChild(text);
+
+  if (mouseMoveHandler) window.removeEventListener('mousemove', mouseMoveHandler);
+  if (touchMoveHandler) window.removeEventListener('touchmove', touchMoveHandler);
+  if (snakeKeyHandler) window.removeEventListener('keydown', snakeKeyHandler);
+  if (snakeClickHandler) window.removeEventListener('mousedown', snakeClickHandler);
 
   setTimeout(() => {
     if (typeof goToMainMenu === 'function') {
