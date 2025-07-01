@@ -195,7 +195,17 @@ function addSnakeSegment(cube = player) {
   const seg = createCube(cube.styleName, BLOCK_SIZE, 1, true, 1);
   seg.parentCube = cube;
   seg.isSnakeSegment = true;
-  const historyPos = cube.positionHistory[0] || { x: cube.body.position.x, y: cube.body.position.y };
+  const tailIndex =
+    cube.positionHistory.length -
+    1 -
+    (cube.snakeSegments.length + 1) * SNAKE_HISTORY_STEP;
+  let historyPos = cube.positionHistory[tailIndex];
+  if (!historyPos) {
+    historyPos = cube.positionHistory[0] || {
+      x: cube.body.position.x,
+      y: cube.body.position.y,
+    };
+  }
   Body.setPosition(seg.body, historyPos);
   if (seg.body) seg.body.collisionFilter.group = -cube.cid;
   world.addChild(seg);
