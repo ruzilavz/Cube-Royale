@@ -18,6 +18,26 @@ const rooms = {};
 // Дополнительные данные об игроках
 const players = {};
 
+const STYLE_NAMES = [
+  "cheese",
+  "watermelon",
+  "meat",
+  "orange",
+  "grass",
+  "salmon",
+  "tree",
+  "marble",
+  "pepsi",
+  "egg",
+  "sparklingWater",
+  "mechanical",
+  "worm",
+];
+
+function getUsedStyles() {
+  return new Set(Object.values(players).map((p) => p.style));
+}
+
 function findRoom() {
   for (const [id, players] of Object.entries(rooms)) {
     if (players.size < MAX_PLAYERS) {
@@ -38,7 +58,15 @@ io.on("connection", (socket) => {
     socket.join(roomId);
     socket.roomId = roomId;
     rooms[roomId].add(socket.id);
-    players[socket.id] = { style: data?.style || "cheese" };
+    let desired = data?.style || STYLE_NAMES[0];
+    const used = getUsedStyles();
+    if (used.has(desired)) {
+      const avail = STYLE_NAMES.filter((s) => !used.has(s));
+      if (avail.length > 0) {
+        desired = avail[Math.floor(Math.random() * avail.length)];
+      }
+    }
+    players[socket.id] = { style: desired };
 
     // Отправить новому игроку уже находящихся в комнате
     const others = Array.from(rooms[roomId])

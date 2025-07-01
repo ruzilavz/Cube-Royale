@@ -68,6 +68,7 @@ let app,
 const { Engine, World: MWorld, Bodies, Body, Vector, Events } = Matter;
 
 const WORLD_SIZE = 5000;
+const WORLD_LIMIT = WORLD_SIZE / 2 - BLOCK_SIZE;
 const FOOD_COUNT = 250;
 const MAX_PLAYER_SIZE = 250;
 const BLOCK_SIZE = 35;
@@ -103,6 +104,15 @@ const STYLES = {
   mechanical: { path: 'assets/styles/mechanical.png', color: 0x777777 },
   worm: { path: 'assets/styles/worm.png', color: 0xcc6622 }
 };
+
+function clamp(val, min, max) {
+  return Math.max(min, Math.min(max, val));
+}
+
+function clampPosition(pos, size = BLOCK_SIZE) {
+  const half = WORLD_SIZE / 2 - size / 2;
+  return { x: clamp(pos.x, -half, half), y: clamp(pos.y, -half, half) };
+}
 
 let selectedStyle = 'cheese';
 
@@ -146,10 +156,11 @@ function toggleSnake(cube = player) {
       seg.isSnakeSegment = true;
         if (cube.body) {
           const off = cube.size / 2 + (newSegments.length + 0.5) * CELL_SIZE;
-          Body.setPosition(seg.body, {
+          const pos = clampPosition({
             x: cube.body.position.x - off,
             y: cube.body.position.y,
           });
+          Body.setPosition(seg.body, pos);
         }
       world.addChild(seg);
       newSegments.push(seg);
@@ -160,10 +171,11 @@ function toggleSnake(cube = player) {
       seg.parentCube = cube;
         if (cube.body) {
           const off = cube.size / 2 + (newSegments.length + 0.5) * CELL_SIZE;
-          Body.setPosition(seg.body, {
+          const pos = clampPosition({
             x: cube.body.position.x - off,
             y: cube.body.position.y,
           });
+          Body.setPosition(seg.body, pos);
         }
       world.addChild(seg);
       newSegments.push(seg);
@@ -228,7 +240,7 @@ function addSnakeSegment(cube = player) {
         y: cube.body.position.y,
       };
   }
-  Body.setPosition(seg.body, historyPos);
+  Body.setPosition(seg.body, clampPosition(historyPos));
   if (seg.body) seg.body.collisionFilter.group = -(cube.cid + 1);
   world.addChild(seg);
   cube.snakeSegments.push(seg);
@@ -581,6 +593,9 @@ function spawnFood() {
   food.height = size;
   food.x = (Math.random() - 0.5) * WORLD_SIZE;
   food.y = (Math.random() - 0.5) * WORLD_SIZE;
+  const clamped = clampPosition({ x: food.x, y: food.y }, size);
+  food.x = clamped.x;
+  food.y = clamped.y;
   food.isFood = true;
   food.collected = false;
   food.massSize = size;
@@ -617,6 +632,7 @@ function gameLoop(delta, targetX, targetY) {
     if (bot.isSnake) updateSnakeSegments(delta, bot);
   }
   Engine.update(engine, delta * 16);
+  clampAllBodies();
 
   globalTime += delta;
   for (const f of foods) {
@@ -692,8 +708,8 @@ function collectParticle(cube, p) {
   removeParticle(p);
   const owner = cube.parentCube && cube.parentCube.isSnake ? cube.parentCube : cube;
   if (owner.score === undefined) owner.score = 0;
+  owner.score += 1;
   if (getTotalMass(owner) >= MAX_TOTAL_MASS) {
-    owner.score += 1;
     return;
   }
   if (cube.isSnake) {
@@ -843,10 +859,16 @@ function checkFoodCollisions() {
 
 function createBots(count) {
   const styleNames = Object.keys(STYLES);
+  const used = new Set();
+  if (player) used.add(player.styleName);
+  for (const b of bots) used.add(b.styleName);
   for (let i = 0; i < count; i++) {
-    const randStyle = styleNames[Math.floor(Math.random() * styleNames.length)];
+    const available = styleNames.filter((s) => !used.has(s));
+    const randStyle = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : styleNames[Math.floor(Math.random() * styleNames.length)];
+    used.add(randStyle);
     const bot = createCube(randStyle, BIG_CUBE_SIZE, BIG_CUBE_MASS, true, 1); // big central cube
-    Body.setPosition(bot.body, { x: (Math.random() - 0.5) * WORLD_SIZE, y: (Math.random() - 0.5) * WORLD_SIZE });
+    const pos = clampPosition({ x: (Math.random() - 0.5) * WORLD_SIZE, y: (Math.random() - 0.5) * WORLD_SIZE }, BIG_CUBE_SIZE);
+    Body.setPosition(bot.body, pos);
     bot.target = null;
     bots.push(bot);
     world.addChild(bot);
@@ -945,7 +967,35 @@ function updateSnakeSegments(delta, cube) {
     if (!seg.body) continue;
     const histIndex = cube.positionHistory.length - 1 - (i + 1) * SNAKE_HISTORY_STEP;
     const target = cube.positionHistory[histIndex] || cube.positionHistory[0] || headPos;
-    Body.setPosition(seg.body, target);
+    Body.setPosition(seg.body, clampPosition(target));
+  }
+}
+
+function clampBody(body, size) {
+  if (!body) return;
+  const pos = clampPosition(body.position, size);
+  if (pos.x !== body.position.x || pos.y !== body.position.y) {
+    Body.setPosition(body, pos);
+  }
+}
+
+function clampAllBodies() {
+  if (player && player.body) clampBody(player.body, player.size);
+  for (const bot of bots) {
+    if (bot.body) clampBody(bot.body, bot.size);
+    if (bot.snakeSegments) {
+      for (const seg of bot.snakeSegments) {
+        if (seg.body) clampBody(seg.body, BLOCK_SIZE);
+      }
+    }
+  }
+  if (player && player.snakeSegments) {
+    for (const seg of player.snakeSegments) {
+      if (seg.body) clampBody(seg.body, BLOCK_SIZE);
+    }
+  }
+  for (const f of foods) {
+    if (f.body) clampBody(f.body, FOOD_SIZE);
   }
 }
 
@@ -1054,8 +1104,9 @@ function createFragmentFromCollision(pos, from, color) {
   const size = BLOCK_SIZE;
   const frag = new PIXI.Graphics();
   drawVoxel(frag, color);
-  frag.x = pos.x;
-  frag.y = pos.y;
+  const cPos = clampPosition(pos, size);
+  frag.x = cPos.x;
+  frag.y = cPos.y;
   frag.isFood = true;
   frag.isFragment = true;
   frag.alpha = 0.8;
@@ -1071,7 +1122,7 @@ function createFragmentFromCollision(pos, from, color) {
     })];
   }
   frag.massSize = size;
-  const body = Bodies.rectangle(pos.x, pos.y, size, size, {
+  const body = Bodies.rectangle(cPos.x, cPos.y, size, size, {
     isSensor: true,
     frictionAir: 0.15,
   });
@@ -1129,8 +1180,9 @@ function removeCubeBlocks(cube, count = 1, fromPos, options = {}) {
       const worldX = cube.body.position.x + cell.x;
       const worldY = cube.body.position.y + cell.y;
 
-      cell.block.x = worldX;
-      cell.block.y = worldY;
+      const blockPos = clampPosition({ x: worldX, y: worldY }, cell.size);
+      cell.block.x = blockPos.x;
+      cell.block.y = blockPos.y;
       cell.block.isFood = true;
       cell.block.isFragment = true;
       cell.block.alpha = 0.8;
@@ -1158,9 +1210,13 @@ function removeCubeBlocks(cube, count = 1, fromPos, options = {}) {
         })];
       }
 
+      const spawnPos = clampPosition(
+        { x: worldX + cell.size / 2, y: worldY + cell.size / 2 },
+        cell.size
+      );
       const body = Bodies.rectangle(
-        worldX + cell.size / 2,
-        worldY + cell.size / 2,
+        spawnPos.x,
+        spawnPos.y,
         cell.size,
         cell.size,
         { isSensor: true, frictionAir: 0.15 }
@@ -1179,7 +1235,7 @@ function removeCubeBlocks(cube, count = 1, fromPos, options = {}) {
       foods.push(cell.block);
       world.addChild(cell.block);
 
-      createBlockExplosion({ x: worldX + cell.size / 2, y: worldY + cell.size / 2 });
+      createBlockExplosion(clampPosition({ x: worldX + cell.size / 2, y: worldY + cell.size / 2 }, cell.size));
     }
   }
   cube.hitTime = 12;
