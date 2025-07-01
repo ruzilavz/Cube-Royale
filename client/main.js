@@ -1053,13 +1053,55 @@ function collideCubes(c1, c2) {
   const c2Head = c2.isSnake && !c2.parentCube;
   const c1Body = c1.parentCube && c1.parentCube.isSnake;
   const c2Body = c2.parentCube && c2.parentCube.isSnake;
+  const c1Seg = c1.isSnakeSegment;
+  const c2Seg = c2.isSnakeSegment;
+
+  // Segment vs segment collisions cause no damage
+  if (!c1Head && c1Seg && !c2Head && c2Seg) {
+    return;
+  }
+
+  // Snake body segments can only be destroyed, not deal damage
+  if (!c1Head && c1Seg) {
+    removeCubeBlocks(c1, 1, pos2);
+    return;
+  }
+  if (!c2Head && c2Seg) {
+    removeCubeBlocks(c2, 1, pos1);
+    return;
+  }
+
+  // Snake head attacking cube-form players or bots
+  if (c1Head && !c2Head && !c2Body && !c2Seg) {
+    removeCubeBlocks(c2, 1, pos1);
+    return;
+  }
+  if (c2Head && !c1Head && !c1Body && !c1Seg) {
+    removeCubeBlocks(c1, 1, pos2);
+    return;
+  }
+
+  // Snake head attacking snake segments - must start from tail
+  if (c1Head && c2Body) {
+    if (c2.parentCube && c2.parentCube.snakeSegments[c2.parentCube.snakeSegments.length - 1] === c2) {
+      removeCubeBlocks(c2, 1, pos1);
+    }
+    return;
+  }
+  if (c2Head && c1Body) {
+    if (c1.parentCube && c1.parentCube.snakeSegments[c1.parentCube.snakeSegments.length - 1] === c1) {
+      removeCubeBlocks(c1, 1, pos2);
+    }
+    return;
+  }
 
   if (c1Head && c2Head) {
-    if (c1.snakeSegments.length > 0 || c2.snakeSegments.length > 0) {
-      return;
+    if (c2.snakeSegments.length === 0) {
+      removeCubeBlocks(c2, 1, pos1);
     }
-    removeCubeBlocks(c1, 1, pos2);
-    removeCubeBlocks(c2, 1, pos1);
+    if (c1.snakeSegments.length === 0) {
+      removeCubeBlocks(c1, 1, pos2);
+    }
     return;
   }
 
