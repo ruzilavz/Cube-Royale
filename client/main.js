@@ -62,8 +62,10 @@ const FOOD_SIZE = 25;
 let cubeIdCounter = 0;
 const HIT_COOLDOWN = 500; // ms between damage from the same cube
 const EAT_INTERVAL = 15; // ticks between consuming blocks during eating
-const SPEED_BASE = 3;
-const SNAKE_SPEED = 2;
+// Base movement speed when in cube form
+const SPEED_BASE = 2;
+// Movement speed while in snake form
+const SNAKE_SPEED = 3;
 const SNAKE_COOLDOWN = 3000; // ms
 const SNAKE_HISTORY_STEP = 2; // frames between segment positions
 let globalTime = 0;
@@ -959,6 +961,24 @@ function collideCubes(c1, c2) {
 
   const pos1 = { x: c1.body.position.x, y: c1.body.position.y };
   const pos2 = { x: c2.body.position.x, y: c2.body.position.y };
+
+  // If two snake heads collide, nothing happens
+  if (
+    c1.isSnake && !c1.parentCube &&
+    c2.isSnake && !c2.parentCube
+  ) {
+    return;
+  }
+
+  // Head can destroy body segments without taking damage
+  if (c1.isSnake && !c1.parentCube && c2.parentCube) {
+    removeCubeBlocks(c2, 1, pos1);
+    return;
+  }
+  if (c2.isSnake && !c2.parentCube && c1.parentCube) {
+    removeCubeBlocks(c1, 1, pos2);
+    return;
+  }
 
   let bigger = c1;
   let smaller = c2;
